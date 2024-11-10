@@ -92,6 +92,7 @@ fn encode_completion_for_action(
     if !is_action_block(text, line_nr, char_nr) {
         return None;
     }
+    log_dbg!(COMPL, "Complete for action block");
 
     let mut is_incomplete = true;
     let mut items = json::JsonValue::new_array();
@@ -228,14 +229,37 @@ fn encode_completion_for_line(id: u64, prefix: &str, line_str: &str) -> Option<j
     let mut items = json::JsonValue::new_array();
     let mut is_incomplete = false;
 
-    let mut count = 1000;
-    log_dbg!(COMPL, "LINE {line_str}");
-    if line_str.trim().starts_with(prefix) {
-        for l in available_traces.lines() {
-            if l.trim().starts_with(line_str.trim()) {
-                log_dbg!(COMPL, "TRACE LINE {l}");
+    let max_count = 200;
+    let mut count = max_count as i32;
+    let mut duplicates: HashMap<String, u32> = HashMap::new();
+
+    for trace_line in available_traces.lines() {
+        if trace_line.trim().starts_with(line_str.trim()) {
+            //TODO: save matched tokens ans skip duplicate lines here
+
+            let trace_tokens: Vec<&str> = trace_line.split(":").collect();
+            let line_tokens: Vec<&str> = line_str.split(":").collect();
+
+            let mut match_tokens = 0;
+            for i in 0..std::cmp::min(trace_tokens.len(), line_tokens.len()) {
+                if trace_tokens[i] != line_tokens[i] {
+                    break;
+                }
+                match_tokens += 1;
+            }
+
+            if trace_tokens.len() > match_tokens {
+                let label = trace_tokens[match_tokens];
+
+                match duplicates.get(label) {
+                    None => duplicates.insert(label.to_string(), 1),
+                    Some(_) => continue,
+                };
+
+                log_vdbg!(COMPL, "Adding complete item: {label}");
+
                 let item = object! {
-                    "label": l.strip_prefix(prefix),
+                    "label": label,
                     "kind": 5,
                     "detail": "TODO",
                     "documentation": "need better documentation",
@@ -248,7 +272,7 @@ fn encode_completion_for_line(id: u64, prefix: &str, line_str: &str) -> Option<j
                 }
             }
         }
-    };
+    }
 
     let data = object! {
         "id" : id,
