@@ -256,11 +256,17 @@ fn encode_completion_for_line(id: u64, prefix: &str, line_str: &str) -> Option<j
                     Some(_) => continue,
                 };
 
+                let kind = if match_tokens == trace_tokens.len() - 1 {
+                    5 // Field
+                } else {
+                    9 // Module
+                };
+
                 log_vdbg!(COMPL, "Adding complete item: {label}");
 
                 let item = object! {
                     "label": label,
-                    "kind": 5,
+                    "kind": kind,
                     "detail": "TODO",
                     "documentation": "need better documentation",
                 };
