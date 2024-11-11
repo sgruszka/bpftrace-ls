@@ -23,8 +23,17 @@ enum MessageType {
     Notification,
 }
 
-fn handle_notification(state: &mut State, method: String, content: json::JsonValue) -> bool {
-    let mut need_diagnostics = false;
+enum NotificationAction {
+    None,
+    Exit,
+    SendDiagnostics,
+}
+
+fn handle_notification(
+    state: &mut State,
+    method: String,
+    content: json::JsonValue,
+) -> NotificationAction {
     match &method[..] {
         "textDocument/didOpen" => {
             let text_document = &content["params"]["textDocument"];
@@ -34,7 +43,7 @@ fn handle_notification(state: &mut State, method: String, content: json::JsonVal
             state.insert(uri, text);
 
             log_dbg!(NOTIF, "Open: textDocument: {}", text_document);
-            need_diagnostics = true;
+            return NotificationAction::SendDiagnostics;
         }
         "textDocument/didChange" => {
             let text_document = &content["params"]["textDocument"];
@@ -46,10 +55,13 @@ fn handle_notification(state: &mut State, method: String, content: json::JsonVal
             state.insert(uri, text.to_string());
 
             log_dbg!(NOTIF, "Change: textDocument: {}", text_document);
-            need_diagnostics = true;
+            return NotificationAction::SendDiagnostics;
         }
         "textDocument/didSave" => {
-            need_diagnostics = true;
+            return NotificationAction::SendDiagnostics;
+        }
+        "exit" => {
+            return NotificationAction::Exit;
         }
         _ => log_dbg!(
             NOTIF,
@@ -59,7 +71,7 @@ fn handle_notification(state: &mut State, method: String, content: json::JsonVal
         ),
     }
 
-    need_diagnostics
+    NotificationAction::None
 }
 
 fn encode_initalize_result(id: u64) -> String {
@@ -349,7 +361,7 @@ fn publish_diagnostics(state: &State) -> String {
     format!("Content-Length: {}\r\n\r\n{}\r\n", resp.len(), resp)
 }
 
-fn encode_message(state: &State, id: u64, method: String, content: json::JsonValue) -> String {
+fn encode_message(state: &State, id: u64, method: &str, content: json::JsonValue) -> String {
     let resp = match &method[..] {
         "initialize" => encode_initalize_result(id),
         "shutdown" => encode_shutdown(id),
@@ -484,19 +496,30 @@ fn main() {
 
                 match msg_type {
                     MessageType::Request => {
-                        let s = encode_message(&state, id, method, content);
+                        let s = encode_message(&state, id, &method, content);
                         log_dbg!(PROTO, "Answer: {}", s);
                         send_message(s);
+                        // TOOD response with InvalidRequest after shutdown
+                        // if method == "shutdown" {
+                        //     break;
+                        // }
                     }
                     MessageType::Response => (),
                     MessageType::Notification => {
-                        let send_diag = handle_notification(&mut state, method, content);
-                        if send_diag {
-                            let s = publish_diagnostics(&state);
-                            log_dbg!(DIAGN, "Send diagnostics: {}", s);
-                            if s.len() > 0 {
-                                send_message(s);
+                        let notif_action = handle_notification(&mut state, method, content);
+                        match notif_action {
+                            NotificationAction::SendDiagnostics => {
+                                let s = publish_diagnostics(&state);
+                                log_dbg!(DIAGN, "Send diagnostics: {}", s);
+                                if s.len() > 0 {
+                                    send_message(s);
+                                }
                             }
+                            NotificationAction::Exit => {
+                                log_dbg!(PROTO, "Exiting");
+                                break;
+                            }
+                            NotificationAction::None => {}
                         }
                     }
                 }
@@ -504,7 +527,8 @@ fn main() {
             Err(e) => {
                 log_err!("Read error {}", e);
                 error_count += 1;
-                if error_count >= 500 {
+                if error_count >= 10 {
+                    log_err!("To many read errors, exiting ...");
                     break;
                 }
             }
