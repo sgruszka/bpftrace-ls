@@ -6,6 +6,9 @@ use std::{
     process::Command,
 };
 
+const PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
+const PKG_NAME: &str = env!("CARGO_PKG_NAME");
+
 pub const JSON_RPC_VERSION: &str = "2.0";
 pub type State = HashMap<String, String>;
 
@@ -88,8 +91,8 @@ fn encode_initalize_result(id: u64) -> String {
     };
 
     let server_info = object! {
-        name: "endlsp",
-        version: "0.0.1",
+        name: PKG_NAME,
+        version: PKG_VERSION,
     };
 
     let data = object! {
@@ -483,7 +486,7 @@ fn main() {
         println!("Failed to create logger, error {e}");
     }
 
-    log_dbg!(PROTO, "bpftrace language server started");
+    log_dbg!(PROTO, "{} {} started", PKG_NAME, PKG_VERSION);
 
     let mut error_count = 0;
     let mut state: HashMap<String, String> = HashMap::new();
