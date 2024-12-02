@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::process::Command;
 use std::sync::Mutex;
 
+use crate::btf_mod::{resolve_func, resolve_struct, setup_btf_for_kfunc, ResolvedBtfItem};
 use crate::log_mod::{self, COMPL, VERBOSE_DEBUG};
 use crate::{log_dbg, log_vdbg};
 use crate::{State, JSON_RPC_VERSION};
@@ -109,6 +110,7 @@ fn encode_completion_for_action(
             v[0] = "kfunc";
         }
         let probe = v[..].join(":").to_string();
+        log_dbg!(COMPL, "Completing for probe vec: {:?}", v);
 
         let mut probes_args_map = PROBES_ARGS_MAP.lock().unwrap();
 
@@ -133,7 +135,7 @@ fn encode_completion_for_action(
     } else {
         log_dbg!(
             COMPL,
-            "Founds probe {} arguments: {}",
+            "Found probe {} arguments: {}",
             probe,
             this_probe_args
         );
@@ -141,7 +143,20 @@ fn encode_completion_for_action(
 
     if is_args(line_str, char_nr) && !this_probe_args.is_empty() {
         let mut probe_args_iter = this_probe_args.lines();
-        let _ = probe_args_iter.nth(0); // skip first line
+        if let Some(first_arg) = probe_args_iter.next() {
+            if first_arg.starts_with("kfunc") {
+                let kfunc_probe_vec: Vec<&str> = first_arg.split(":").collect();
+                if kfunc_probe_vec.len() > 2 {
+                    let btf_vec = setup_btf_for_kfunc(first_arg);
+                    for btf in btf_vec {
+                        if let Some(btf_func) = resolve_func(&btf, kfunc_probe_vec[2]) {
+                            log_dbg!(COMPL, "GOT RESOLVED BTF FUNC {:?}", btf_func);
+                        }
+                    }
+                }
+            }
+        }
+
         for arg in probe_args_iter {
             let tokens: Vec<&str> = arg.split(" ").collect();
             if tokens.len() <= 1 {

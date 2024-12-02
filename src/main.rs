@@ -16,6 +16,7 @@ mod completion;
 
 #[macro_use]
 pub mod log_mod;
+pub mod btf_mod;
 
 use log_mod::{DIAGN, HOVER, NOTIF, PROTO, VERBOSE_DEBUG};
 

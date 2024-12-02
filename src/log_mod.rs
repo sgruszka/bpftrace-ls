@@ -7,6 +7,7 @@ pub const DIAGN: u32 = 1 << 1;
 pub const COMPL: u32 = 1 << 2;
 pub const NOTIF: u32 = 1 << 3;
 pub const HOVER: u32 = 1 << 4;
+pub const BTFRE: u32 = 1 << 5;
 
 pub const VERBOSE_DEBUG: u32 = 0;
 
@@ -82,7 +83,7 @@ pub fn create_logger(filename: &str) -> Result<(), std::io::Error> {
     LOGGER
         .set(Logger {
             name: filename.to_string(),
-            mask: DIAGN, //COMPL | PROTO,
+            mask: COMPL | BTFRE,
         })
         .expect("Was already initalized");
     // Create / truncate the file every time we run
