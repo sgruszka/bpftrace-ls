@@ -181,18 +181,18 @@ pub fn resolve_func(btf: &Btf, name: &str) -> Option<ResolvedBtfItem> {
     Some(item)
 }
 
-pub fn setup_btf_for_kfunc(kfunc_probe: &str) -> Vec<Btf> {
-    let mut v: Vec<Btf> = Vec::new();
+pub fn setup_btf_for_module(module: &str) -> Option<Btf> {
     let btf_base = Btf::from_file("/sys/kernel/btf/vmlinux").unwrap();
-    // v.push(btf_base);
+    if module == "vmlinux" {
+        return Some(btf_base);
+    }
 
-    let kfunc_probe_vec: Vec<&str> = kfunc_probe.split(":").collect();
-    let mut path = "/sys/kernel/btf/".to_string();
-    path.push_str(&kfunc_probe_vec[1]);
+    let path = "/sys/kernel/btf/".to_string();
 
     if let Ok(btf) = Btf::from_split_file(&path, &btf_base) {
         log_dbg!(BTFRE, "GOT BTF for {}", path);
-        v.push(btf);
+        return Some(btf);
     }
-    v
+
+    None
 }

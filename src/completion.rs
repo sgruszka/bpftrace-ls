@@ -4,13 +4,16 @@ use std::collections::HashMap;
 use std::process::Command;
 use std::sync::Mutex;
 
-use crate::btf_mod::{resolve_func, resolve_struct, setup_btf_for_kfunc, ResolvedBtfItem};
+use crate::btf_mod::{resolve_func, resolve_struct, setup_btf_for_module, ResolvedBtfItem};
 use crate::log_mod::{self, COMPL, VERBOSE_DEBUG};
 use crate::{log_dbg, log_vdbg};
 use crate::{State, JSON_RPC_VERSION};
+use btf_rs::Btf;
 
 static PROBES_ARGS_MAP: Lazy<Mutex<HashMap<String, String>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
+
+static MODULE_BTF_MAP: Lazy<Mutex<HashMap<String, Btf>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 fn get_text(state: &State, uri: &str) -> String {
     if let Some(text) = state.get(uri) {
@@ -66,6 +69,21 @@ fn is_args(line_str: &str, char_nr: usize) -> bool {
     res
 }
 
+fn is_evalueted_arg(line_str: &str, char_nr: usize, args: &mut String) -> bool {
+    let mut res = false;
+    if let Some(line_upto_char) = line_str.get(0..char_nr) {
+        if let Some(last_word) = line_upto_char
+            .rsplit(|c| c == ' ' || c == '{' || c == '(')
+            .nth(0)
+        {
+            args.push_str(last_word);
+            res = true;
+        }
+    }
+
+    res
+}
+
 fn find_probe_for_action(text: &str, line_nr: usize) -> String {
     if let Some(line) = text.lines().nth(line_nr) {
         if let Some(char_nr) = line.find("{") {
@@ -79,6 +97,69 @@ fn find_probe_for_action(text: &str, line_nr: usize) -> String {
                 }
             }
         }
+    }
+    "".to_string()
+}
+
+fn find_probe_args_by_command(probe: &str) -> String {
+    if probe.is_empty() {
+        return "".to_string();
+    }
+
+    log_dbg!(COMPL, "Completing for probe: {}", probe);
+
+    // Use kfunc for getting arguments, kprobe/kretprobe does not work
+    let mut v: Vec<&str> = probe.split(":").collect();
+    if v[0] == "kprobe" || v[0] == "kretprobe" {
+        v[0] = "kfunc";
+    }
+    let probe = v[..].join(":").to_string();
+    log_dbg!(COMPL, "Completing for probe vec: {:?}", v);
+
+    let mut probes_args_map = PROBES_ARGS_MAP.lock().unwrap();
+
+    let mut this_probe_args = "".to_string();
+    if let Some(args) = probes_args_map.get(&probe) {
+        this_probe_args = args.to_string();
+    } else if let Ok(output) = Command::new("sudo")
+        .arg("bpftrace")
+        .arg("-l")
+        .arg("-v")
+        .arg(probe.clone())
+        .output()
+    {
+        if let Ok(probe_args) = String::from_utf8(output.stdout) {
+            probes_args_map.insert(probe.clone(), probe_args.clone());
+            this_probe_args = probe_args.clone();
+        }
+    }
+
+    this_probe_args
+}
+
+fn find_kfunc_args_by_btf(kfunc: &str) -> String {
+    let kfunc_vec: Vec<&str> = kfunc.split(":").collect();
+    if kfunc_vec.len() < 2 {
+        return "".to_string();
+    }
+
+    let module = kfunc_vec[1];
+    let mut module_btf_map = MODULE_BTF_MAP.lock().unwrap();
+
+    let this_btf;
+    if let Some(btf) = module_btf_map.get(module) {
+        this_btf = btf;
+    } else {
+        if let Some(btf) = setup_btf_for_module(module) {
+            module_btf_map.insert(module.to_string(), btf);
+            this_btf = module_btf_map.get(module).unwrap();
+        } else {
+            return "".to_string();
+        }
+    }
+
+    if let Some(res) = resolve_func(&this_btf, kfunc_vec[2]) {
+        log_dbg!(COMPL, "FOUND {:?}", res);
     }
     "".to_string()
 }
@@ -99,61 +180,21 @@ fn encode_completion_for_action(
     let mut items = json::JsonValue::new_array();
 
     let probe = find_probe_for_action(text, line_nr);
+    let probe_args = find_probe_args_by_command(&probe);
 
-    let mut this_probe_args = "".to_string();
-    if !probe.is_empty() {
-        log_dbg!(COMPL, "Completing for probe: {}", probe);
-
-        // Use kfunc for getting arguments, kprobe/kretprobe does not work
-        let mut v: Vec<&str> = probe.split(":").collect();
-        if v[0] == "kprobe" || v[0] == "kretprobe" {
-            v[0] = "kfunc";
-        }
-        let probe = v[..].join(":").to_string();
-        log_dbg!(COMPL, "Completing for probe vec: {:?}", v);
-
-        let mut probes_args_map = PROBES_ARGS_MAP.lock().unwrap();
-
-        if let Some(args) = probes_args_map.get(&probe) {
-            this_probe_args = args.to_string();
-        } else if let Ok(output) = Command::new("sudo")
-            .arg("bpftrace")
-            .arg("-l")
-            .arg("-v")
-            .arg(probe.clone())
-            .output()
-        {
-            if let Ok(probe_args) = String::from_utf8(output.stdout) {
-                probes_args_map.insert(probe.clone(), probe_args.clone());
-                this_probe_args = probe_args.clone();
-            }
-        }
-    }
-
-    if this_probe_args.is_empty() {
+    if probe_args.is_empty() {
         log_dbg!(COMPL, "No arguments for probe {}", probe);
     } else {
-        log_dbg!(
-            COMPL,
-            "Found probe {} arguments: {}",
-            probe,
-            this_probe_args
-        );
+        log_dbg!(COMPL, "Found probe {} arguments: {}", probe, probe_args);
     }
 
-    if is_args(line_str, char_nr) && !this_probe_args.is_empty() {
-        let mut probe_args_iter = this_probe_args.lines();
-        if let Some(first_arg) = probe_args_iter.next() {
-            if first_arg.starts_with("kfunc") {
-                let kfunc_probe_vec: Vec<&str> = first_arg.split(":").collect();
-                if kfunc_probe_vec.len() > 2 {
-                    let btf_vec = setup_btf_for_kfunc(first_arg);
-                    for btf in btf_vec {
-                        if let Some(btf_func) = resolve_func(&btf, kfunc_probe_vec[2]) {
-                            log_dbg!(COMPL, "GOT RESOLVED BTF FUNC {:?}", btf_func);
-                        }
-                    }
-                }
+    let mut this_args = String::new();
+
+    if is_args(line_str, char_nr) && !probe_args.is_empty() {
+        let mut probe_args_iter = probe_args.lines();
+        if let Some(first_arg_line) = probe_args_iter.next() {
+            if first_arg_line.starts_with("kfunc") {
+                let _ = find_kfunc_args_by_btf(first_arg_line);
             }
         }
 
@@ -176,6 +217,8 @@ fn encode_completion_for_action(
             let _ = items.push(completion);
         }
         is_incomplete = false;
+    } else if is_evalueted_arg(line_str, char_nr, &mut this_args) {
+        log_dbg!(COMPL, "THIS ARGS {}", this_args);
     } else {
         // TODO provide complete list
         let completion_printf = object! {
