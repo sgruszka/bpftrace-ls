@@ -1,7 +1,7 @@
 use btf_rs::*;
 
-use crate::log_mod::{self, BTFRE, VERBOSE_DEBUG};
-use crate::{log_dbg, log_vdbg};
+use crate::log_dbg;
+use crate::log_mod::{self, BTFRE};
 
 #[derive(Debug)]
 #[allow(unused_variables)]
@@ -183,14 +183,13 @@ pub fn resolve_func(btf: &Btf, name: &str) -> Option<ResolvedBtfItem> {
 
 pub fn setup_btf_for_module(module: &str) -> Option<Btf> {
     let btf_base = Btf::from_file("/sys/kernel/btf/vmlinux").unwrap();
-    if module == "vmlinux" {
+    if module.is_empty() || module == "vmlinux" {
         return Some(btf_base);
     }
 
-    let path = "/sys/kernel/btf/".to_string();
-
+    let path = "/sys/kernel/btf/".to_string() + module;
     if let Ok(btf) = Btf::from_split_file(&path, &btf_base) {
-        log_dbg!(BTFRE, "GOT BTF for {}", path);
+        log_dbg!(BTFRE, "Loaded btf for {}", path);
         return Some(btf);
     }
 
