@@ -85,7 +85,7 @@ fn encode_initalize_result(id: u64) -> String {
         "definitionProvider": true,
         // "codeActionProvider": true,
         "completionProvider": {
-            "triggerCharacters": [":", "."],
+            "triggerCharacters": [":", ".", ">"],
             "resolveProvider": true,
 
         },
