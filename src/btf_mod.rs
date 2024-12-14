@@ -195,3 +195,41 @@ pub fn setup_btf_for_module(module: &str) -> Option<Btf> {
 
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_load_module() {
+        let btf1 = setup_btf_for_module("vmlinux");
+        match btf1 {
+            Some(_) => assert!(true),
+            None => assert!(false),
+        }
+        let btf2 = setup_btf_for_module("blabla713h");
+        match btf2 {
+            Some(_) => assert!(false),
+            None => assert!(true),
+        }
+    }
+
+    #[test]
+    fn test_resolve() {
+        let btf = setup_btf_for_module("vmlinux").unwrap();
+
+        let r = resolve_func(&btf, "alloc_pid").unwrap();
+        assert!(r.name == "alloc_pid");
+        assert!(r.children_vec[0].name == "ns");
+
+        let pid_namespace = resolve_struct(&btf, r.children_vec[0].type_id).unwrap();
+        assert!(pid_namespace.name == "pid_namespace");
+
+        let pid_cachep = pid_namespace
+            .children_vec
+            .iter()
+            .find(|v| v.name == "pid_cachep")
+            .unwrap();
+        assert!(pid_cachep.name == "pid_cachep");
+        assert!(pid_cachep.type_vec[1] == "kmem_cache");
+    }
+}
