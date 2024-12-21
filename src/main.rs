@@ -4,6 +4,7 @@ use std::{
     collections::HashMap,
     io::{self, Read, Write},
     process::Command,
+    time::Instant,
 };
 
 const PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -496,12 +497,14 @@ fn main() {
     loop {
         match recv_message() {
             Ok(msg) => {
+                let start_time = Instant::now();
                 let (msg_type, id, method, content) = decode_message(msg);
 
                 match msg_type {
                     MessageType::Request => {
                         let s = encode_message(&state, id, &method, content);
-                        log_dbg!(PROTO, "Answer: {}", s);
+                        let time_diff = start_time.elapsed();
+                        log_dbg!(PROTO, "Answer after {:?}:\n{}", time_diff, s);
                         send_message(s);
                         // TOOD response with InvalidRequest after shutdown
                         // if method == "shutdown" {
