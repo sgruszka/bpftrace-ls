@@ -196,7 +196,7 @@ fn resolve_parameter(btf: &Btf, param: &btf::Parameter) -> ResolvedBtfItem {
     parameter_item
 }
 
-pub fn resolve_func(btf: &Btf, name: &str) -> Option<ResolvedBtfItem> {
+pub fn btf_resolve_func(btf: &Btf, name: &str) -> Option<ResolvedBtfItem> {
     log_dbg!(BTFRE, "LOOKING FOR {}", name);
     if let Err(_) = btf.resolve_types_by_name(name) {
         log_dbg!(BTFRE, "LOOKING FOR {} FAILED", name);
@@ -351,7 +351,7 @@ mod tests {
     fn test_resolve() {
         let btf = btf_setup_module("vmlinux").unwrap();
 
-        let r = resolve_func(&btf, "alloc_pid").unwrap();
+        let r = btf_resolve_func(&btf, "alloc_pid").unwrap();
         assert!(r.name == "alloc_pid");
         assert!(r.children_vec[0].name == "ns");
 
@@ -372,7 +372,7 @@ mod tests {
         // alloc_pid: ns->rcu.next->func
         let btf = btf_setup_module("vmlinux").unwrap();
 
-        let base = resolve_func(&btf, "alloc_pid").unwrap();
+        let base = btf_resolve_func(&btf, "alloc_pid").unwrap();
         let names_chain = vec!["ns", "->", "rcu", ".", "next"];
 
         let resolved = btf_iterate_over_names_chain(&btf, base.clone(), &names_chain).unwrap();
@@ -385,7 +385,7 @@ mod tests {
         // vfs_open: path->dentry->d_inode->i_uid
         let btf = btf_setup_module("vmlinux").unwrap();
 
-        let base = resolve_func(&btf, "vfs_open").unwrap();
+        let base = btf_resolve_func(&btf, "vfs_open").unwrap();
         assert!(base.name == "vfs_open");
 
         let resolved = btf_iterate_over_names_chain(&btf, base.clone(), &Vec::new()).unwrap();
