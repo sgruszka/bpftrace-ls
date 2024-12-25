@@ -56,7 +56,7 @@ fn resolve_struct_member(btf: &Btf, member: &btf::Member, id: u32) -> ResolvedBt
     item
 }
 
-pub fn resolve_struct(btf: &Btf, base_id: u32) -> Option<ResolvedBtfItem> {
+fn resolve_struct(btf: &Btf, base_id: u32) -> Option<ResolvedBtfItem> {
     let mut id = base_id;
     let mut type_vec: Vec<String> = Vec::new();
 
