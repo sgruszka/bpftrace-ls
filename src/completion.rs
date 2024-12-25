@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::process::Command;
 use std::sync::Mutex;
 
-use crate::btf_mod::{resolve_func, resolve_struct, setup_btf_for_module, ResolvedBtfItem};
+use crate::btf_mod::{btf_setup_module, resolve_func, resolve_struct, ResolvedBtfItem};
 use crate::log_mod::{self, COMPL, VERBOSE_DEBUG};
 use crate::{log_dbg, log_vdbg};
 use crate::{State, JSON_RPC_VERSION};
@@ -206,7 +206,7 @@ fn find_kfunc_args_by_btf(kfunc: &str) -> Option<(String, ResolvedBtfItem)> {
         this_btf = btf;
     } else {
         log_dbg!(COMPL, "Looking for btf for module: {}", module);
-        if let Some(btf) = setup_btf_for_module(module) {
+        if let Some(btf) = btf_setup_module(module) {
             module_btf_map.insert(module.to_string(), btf);
             this_btf = module_btf_map.get(module).unwrap();
         } else {

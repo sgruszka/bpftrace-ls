@@ -222,7 +222,7 @@ pub fn resolve_func(btf: &Btf, name: &str) -> Option<ResolvedBtfItem> {
     Some(item)
 }
 
-pub fn setup_btf_for_module(module: &str) -> Option<Btf> {
+pub fn btf_setup_module(module: &str) -> Option<Btf> {
     let btf_base = Btf::from_file("/sys/kernel/btf/vmlinux").unwrap();
     if module.is_empty() || module == "vmlinux" {
         return Some(btf_base);
@@ -335,12 +335,12 @@ mod tests {
     use super::*;
     #[test]
     fn test_load_module() {
-        let btf1 = setup_btf_for_module("vmlinux");
+        let btf1 = btf_setup_module("vmlinux");
         match btf1 {
             Some(_) => assert!(true),
             None => assert!(false),
         }
-        let btf2 = setup_btf_for_module("blabla713h");
+        let btf2 = btf_setup_module("blabla713h");
         match btf2 {
             Some(_) => assert!(false),
             None => assert!(true),
@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn test_resolve() {
-        let btf = setup_btf_for_module("vmlinux").unwrap();
+        let btf = btf_setup_module("vmlinux").unwrap();
 
         let r = resolve_func(&btf, "alloc_pid").unwrap();
         assert!(r.name == "alloc_pid");
@@ -370,7 +370,7 @@ mod tests {
     #[test]
     fn test_iterate_over_mixed_chain() {
         // alloc_pid: ns->rcu.next->func
-        let btf = setup_btf_for_module("vmlinux").unwrap();
+        let btf = btf_setup_module("vmlinux").unwrap();
 
         let base = resolve_func(&btf, "alloc_pid").unwrap();
         let names_chain = vec!["ns", "->", "rcu", ".", "next"];
@@ -383,7 +383,7 @@ mod tests {
     #[test]
     fn test_iterate_over_dreference_chain() {
         // vfs_open: path->dentry->d_inode->i_uid
-        let btf = setup_btf_for_module("vmlinux").unwrap();
+        let btf = btf_setup_module("vmlinux").unwrap();
 
         let base = resolve_func(&btf, "vfs_open").unwrap();
         assert!(base.name == "vfs_open");
