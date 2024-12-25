@@ -466,7 +466,7 @@ fn recv_message() -> Result<String, i32> {
 
     match String::from_utf8(buf) {
         Ok(s) => {
-            log_dbg!(PROTO, "Read message: '{}'", s);
+            log_vdbg!(PROTO, "Read message: '{}'", s);
             return Ok(s);
         }
         Err(e) => log_err!("Failed to convert to string: {}", e),
@@ -504,7 +504,8 @@ fn main() {
                     MessageType::Request => {
                         let s = encode_message(&state, id, &method, content);
                         let time_diff = start_time.elapsed();
-                        log_dbg!(PROTO, "Answer after {:?}:\n{}", time_diff, s);
+                        log_dbg!(PROTO, "Response time {:?}", time_diff);
+                        log_vdbg!(PROTO, "Answer:\n{}", s);
                         send_message(s);
                         // TOOD response with InvalidRequest after shutdown
                         // if method == "shutdown" {
