@@ -278,11 +278,18 @@ pub fn btf_iterate_over_names_chain(
 
         let mut type_id = first_param.get_type_id().unwrap_or_default();
         for name in names_iter {
+            // TODO: Differenciate between name beeing pointer or embeded structure i.e
+            // pointer_to_struct->field vs struct.field
+            if *name == "->" || *name == "." {
+                continue;
+            }
+
             loop {
                 if type_id == 0 {
                     // TODO error
                     return None;
                 }
+
                 match btf.resolve_type_by_id(type_id).unwrap() {
                     Type::Const(c) => {
                         type_id = c.get_type_id().unwrap_or_default();
@@ -290,11 +297,7 @@ pub fn btf_iterate_over_names_chain(
                     }
                     Type::Ptr(ptr) => {
                         type_id = ptr.get_type_id().unwrap_or_default();
-                        if *name == "->" {
-                            break;
-                        } else {
-                            return None;
-                        }
+                        continue;
                     }
                     Type::Struct(st) => {
                         let member = if let Some(m) = st
@@ -365,11 +368,25 @@ mod tests {
     }
 
     #[test]
+    fn test_iterate_over_mixed_chain() {
+        // alloc_pid: ns->rcu.next->func
+        let btf = setup_btf_for_module("vmlinux").unwrap();
+
+        let base = resolve_func(&btf, "alloc_pid").unwrap();
+        let names_chain = vec!["ns", "->", "rcu", ".", "next"];
+
+        let resolved = btf_iterate_over_names_chain(&btf, base.clone(), &names_chain).unwrap();
+        assert!(resolved.name == "callback_head");
+        assert!(resolved.children_vec[0].name == "next");
+    }
+
+    #[test]
     fn test_iterate_over_dreference_chain() {
         // vfs_open: path->dentry->d_inode->i_uid
         let btf = setup_btf_for_module("vmlinux").unwrap();
 
         let base = resolve_func(&btf, "vfs_open").unwrap();
+        assert!(base.name == "vfs_open");
 
         let resolved = btf_iterate_over_names_chain(&btf, base.clone(), &Vec::new()).unwrap();
         assert!(resolved.name == "vfs_open");
