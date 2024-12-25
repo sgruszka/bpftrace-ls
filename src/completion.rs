@@ -4,7 +4,10 @@ use std::collections::HashMap;
 use std::process::Command;
 use std::sync::Mutex;
 
-use crate::btf_mod::{btf_resolve_func, btf_setup_module, resolve_struct, ResolvedBtfItem};
+use crate::btf_mod::{
+    btf_iterate_over_names_chain, btf_resolve_func, btf_setup_module, resolve_struct,
+    ResolvedBtfItem,
+};
 use crate::log_mod::{self, COMPL, VERBOSE_DEBUG};
 use crate::{log_dbg, log_vdbg};
 use crate::{State, JSON_RPC_VERSION};
@@ -88,53 +91,73 @@ fn is_argument(line_str: &str, char_nr: usize, args: &mut String) -> bool {
     res
 }
 
+fn args_str_to_tokens(names_chain: &str) -> Vec<&str> {
+    let mut start_idx = 0;
+    let mut res: Vec<&str> = Vec::new();
+    for (i, c) in names_chain.chars().enumerate() {
+        match c {
+            '.' => {
+                res.push(&names_chain[start_idx..i]);
+                res.push(".");
+                start_idx = i + 1;
+            }
+            '-' => {
+                res.push(&names_chain[start_idx..i]);
+                start_idx = i + 1;
+            }
+            '>' => {
+                res.push("->");
+                start_idx = i + 1;
+            }
+            _ => (),
+        };
+    }
+
+    res
+}
+
 fn argument_next_item(
     module: String,
-    resolved_btf: &ResolvedBtfItem,
+    resolved_func: ResolvedBtfItem,
     this_argument: &str,
 ) -> Vec<String> {
-    let mut arg_items: Vec<&str> = this_argument
-        .split(|c| c == ' ' || c == '.' || c == '>')
-        .collect();
-    log_dbg!(COMPL, "ARGS ITEMS {:?}", arg_items);
+    // log_dbg!(COMPL, "MODULE {}", module);
+    // log_dbg!(COMPL, "RESOLVED FUNC {:?}", resolved_func);
+    // log_dbg!(COMPL, "THIS_ARGUMENT {}", this_argument);
+    let mut names_chain: Vec<&str> = args_str_to_tokens(this_argument);
+    names_chain.remove(0); // skip "args"
+    names_chain.remove(0); // skip "."
 
-    arg_items.remove(0); // skip "args."
+    // log_dbg!(COMPL, "NAMES CHAIN {:?}", names_chain);
+
+    for name in names_chain.iter_mut() {
+        *name = name.trim_end_matches("-");
+    }
+    log_dbg!(
+        COMPL,
+        "Looking for next item for name chain {:?}",
+        names_chain
+    );
+
+    let module_btf_map = MODULE_BTF_MAP.lock().unwrap();
+
     let mut results: Vec<String> = Vec::new();
-
-    //    for i in arg_items.iter() {
-    if arg_items.len() == 2 {
-        let i = arg_items[0];
-        log_dbg!(COMPL, "Looking for argument {}", i);
-        let item = i.trim_end_matches("-");
-        for child in resolved_btf.children_vec.iter() {
-            log_dbg!(
-                COMPL,
-                " --- get {} match {}",
-                child.name,
-                child.name == item
-            );
-            if child.name == item {
-                let module_btf_map = MODULE_BTF_MAP.lock().unwrap();
-                if let Some(btf) = module_btf_map.get(&module) {
-                    if let Some(res) = resolve_struct(btf, child.type_id) {
-                        for grandchild in res.children_vec.iter() {
-                            let mut res_str = String::new();
-                            for t in grandchild.type_vec.iter() {
-                                res_str.push_str(t);
-                                res_str.push_str(" ");
-                            }
-                            res_str.push_str(&grandchild.name);
-                            results.push(res_str);
-                        }
-                    }
+    if let Some(btf) = module_btf_map.get(&module) {
+        if let Some(resolved) = btf_iterate_over_names_chain(&btf, resolved_func, &names_chain) {
+            for child in resolved.children_vec {
+                let mut res_str = String::new();
+                for t in child.type_vec.iter() {
+                    res_str.push_str(t);
+                    res_str.push_str(" ");
                 }
+                res_str.push_str(&child.name);
+                results.push(res_str);
             }
         }
     }
 
     results
 }
-
 fn find_probe_for_action(text: &str, line_nr: usize) -> String {
     if let Some(line) = text.lines().nth(line_nr) {
         if let Some(char_nr) = line.find("{") {
@@ -238,11 +261,16 @@ fn encode_completion_for_action(
 
     let probe = find_probe_for_action(text, line_nr);
     let probe_args = find_probe_args_by_command(&probe);
+    let mut btf_probe_args = None;
 
     if probe_args.is_empty() {
         log_dbg!(COMPL, "No arguments for probe {}", probe);
     } else {
         log_dbg!(COMPL, "Found probe {} arguments:\n{}", probe, probe_args);
+        // On first line of probe args is kfunc module and name
+        if let Some(first_line) = probe_args.lines().nth(0) {
+            btf_probe_args = find_kfunc_args_by_btf(first_line);
+        }
     }
 
     let mut this_argument = String::new();
@@ -253,16 +281,11 @@ fn encode_completion_for_action(
         log_dbg!(COMPL, "Try to resolve {}", this_argument);
         if let Some(first_arg_line) = probe_args_iter.next() {
             if !this_argument.ends_with("args.") && first_arg_line.starts_with("kfunc") {
-                if let Some((module, resolved_btf)) = find_kfunc_args_by_btf(&first_arg_line) {
-                    log_dbg!(COMPL, "RESOLVED BTF {:?}", resolved_btf);
-                    let args = argument_next_item(module, &resolved_btf, &this_argument);
-                    // for i in args {
-                    //     log_dbg!(COMPL, "AAA {}", i);
-                    // }
-                    // if args.len() > 0 {
+                if let Some((module, resolved_btf)) = btf_probe_args {
+                    let args = argument_next_item(module, resolved_btf, &this_argument);
+
                     args_as_string.push_str(&args.join("\n"));
                     probe_args_iter = args_as_string.lines();
-                    // }
                 }
             }
         }

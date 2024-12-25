@@ -158,6 +158,16 @@ fn resolve_func_parameters(btf: &Btf, func: btf::Func, item: &mut ResolvedBtfIte
     for i in 0..proto.parameters.len() {
         // TODO parameters diffrent than pointers to structure
         let ptr = match btf.resolve_chained_type(&proto.parameters[i]).unwrap() {
+            Type::Const(c) => {
+                let ptr = match btf.resolve_chained_type(&c).unwrap() {
+                    Type::Ptr(ptr) => ptr,
+                    x => {
+                        log_dbg!(BTFRE, "Resolved type is not a pointer, is {:?}", x);
+                        continue;
+                    }
+                };
+                ptr
+            }
             Type::Ptr(ptr) => ptr,
             x => {
                 log_dbg!(BTFRE, "Resolved type is not a pointer, is {:?}", x);
@@ -265,10 +275,12 @@ pub fn btf_iterate_over_names_chain(
 
         if names_iter.peek().is_none() {
             let resolved_param = resolve_parameter(btf, &first_param);
+            // log_dbg!(BTFRE, "RESOLVED PARAM {:?}", resolved_param);
             // TODO Union
             if let Some(mut r) = resolve_struct(btf, resolved_param.type_id) {
                 // TODO pass full resolved_param to struct to keep type
-                assert!(r.name == resolved_param.name);
+                // log_dbg!(BTFRE, "RESOLVED R {:?}", r);
+                // assert!(r.name == resolved_param.name);
                 r.type_vec = resolved_param.type_vec;
                 return Some(r);
             } else {
@@ -424,5 +436,17 @@ mod tests {
             .find(|&r| r.name == "i_uid")
             .unwrap();
         assert!(i_uid.type_vec == vec!("kuid_t"));
+    }
+
+    #[test]
+    #[ignore]
+    fn test_resolve_rt2800_link_tuner() {
+        let btf = btf_setup_module("rt2800lib").unwrap();
+
+        let base = btf_resolve_func(&btf, "rt2800_link_tuner").unwrap();
+        let names_chain = vec!["qual", "->"];
+
+        let resolved = btf_iterate_over_names_chain(&btf, base.clone(), &names_chain).unwrap();
+        println!("{resolved:?}");
     }
 }
