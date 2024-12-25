@@ -129,9 +129,6 @@ fn argument_next_item(
 
     // log_dbg!(COMPL, "NAMES CHAIN {:?}", names_chain);
 
-    for name in names_chain.iter_mut() {
-        *name = name.trim_end_matches("-");
-    }
     log_dbg!(
         COMPL,
         "Looking for next item for name chain {:?}",
