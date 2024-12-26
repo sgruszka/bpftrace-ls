@@ -454,12 +454,13 @@ mod tests {
         assert!(resolved.children_vec.len() == 2);
         assert!(resolved.children_vec[0].name == "path");
 
-        let resolved = btf_iterate_over_names_chain(&btf, base.clone(), "path").unwrap();
+        let resolved = btf_iterate_over_names_chain(&btf, base.clone(), "args.path").unwrap();
         assert!(resolved.name == "path");
         assert!(resolved.type_vec == vec!["const", "struct", "path", "*"]);
         assert!(resolved.children_vec.len() > 0);
 
-        let resolved = btf_iterate_over_names_chain(&btf, base, "path->dentry->d_inode").unwrap();
+        let resolved =
+            btf_iterate_over_names_chain(&btf, base, "args.path->dentry->d_inode").unwrap();
         assert!(resolved.name == "inode");
         assert!(resolved.children_vec.len() > 0);
 
