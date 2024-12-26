@@ -90,31 +90,6 @@ fn is_argument(line_str: &str, char_nr: usize, args: &mut String) -> bool {
     res
 }
 
-fn args_str_to_tokens(names_chain: &str) -> Vec<&str> {
-    let mut start_idx = 0;
-    let mut res: Vec<&str> = Vec::new();
-    for (i, c) in names_chain.chars().enumerate() {
-        match c {
-            '.' => {
-                res.push(&names_chain[start_idx..i]);
-                res.push(".");
-                start_idx = i + 1;
-            }
-            '-' => {
-                res.push(&names_chain[start_idx..i]);
-                start_idx = i + 1;
-            }
-            '>' => {
-                res.push("->");
-                start_idx = i + 1;
-            }
-            _ => (),
-        };
-    }
-
-    res
-}
-
 fn argument_next_item(
     module: String,
     resolved_func: ResolvedBtfItem,
@@ -123,23 +98,23 @@ fn argument_next_item(
     // log_dbg!(COMPL, "MODULE {}", module);
     // log_dbg!(COMPL, "RESOLVED FUNC {:?}", resolved_func);
     // log_dbg!(COMPL, "THIS_ARGUMENT {}", this_argument);
-    let mut names_chain: Vec<&str> = args_str_to_tokens(this_argument);
-    names_chain.remove(0); // skip "args"
-    names_chain.remove(0); // skip "."
-
+    // let mut names_chain: Vec<&str> = args_str_to_tokens(this_argument);
+    // names_chain.remove(0); // skip "args"
+    // names_chain.remove(0); // skip "."
+    //
     // log_dbg!(COMPL, "NAMES CHAIN {:?}", names_chain);
 
-    log_dbg!(
-        COMPL,
-        "Looking for next item for name chain {:?}",
-        names_chain
-    );
+    // log_dbg!(
+    //     COMPL,
+    //     "Looking for next item for name chain {:?}",
+    //     names_chain
+    // );
 
     let module_btf_map = MODULE_BTF_MAP.lock().unwrap();
 
     let mut results: Vec<String> = Vec::new();
     if let Some(btf) = module_btf_map.get(&module) {
-        if let Some(resolved) = btf_iterate_over_names_chain(&btf, resolved_func, &names_chain) {
+        if let Some(resolved) = btf_iterate_over_names_chain(&btf, resolved_func, this_argument) {
             for child in resolved.children_vec {
                 let mut res_str = String::new();
                 for t in child.type_vec.iter() {
@@ -269,8 +244,8 @@ fn encode_completion_for_action(
         }
     }
 
+    // Complete args. i.e. kfunc:xe:__fini_dbm { printf("%s\n", str(args.drm->driver->name)) }
     let mut this_argument = String::new();
-
     if is_argument(line_str, char_nr, &mut this_argument) && !probe_args.is_empty() {
         let mut probe_args_iter = probe_args.lines().into_iter();
         let mut args_as_string = String::new();

@@ -247,12 +247,51 @@ pub fn btf_setup_module(module: &str) -> Option<Btf> {
     None
 }
 
+fn chain_str_to_tokens(names_chain: &str) -> Vec<&str> {
+    let mut res: Vec<&str> = Vec::new();
+
+    let mut start_idx = 0;
+    let mut end_idx = 0;
+
+    for (i, c) in names_chain.chars().enumerate() {
+        match c {
+            '.' => {
+                res.push(&names_chain[start_idx..i]);
+                res.push(".");
+                start_idx = i + 1;
+            }
+            '-' => {
+                res.push(&names_chain[start_idx..i]);
+                start_idx = i + 1;
+            }
+            '>' => {
+                res.push("->");
+                start_idx = i + 1;
+            }
+            _ => end_idx = i,
+        };
+    }
+
+    if end_idx != 0 && start_idx <= end_idx {
+        res.push(&names_chain[start_idx..=end_idx]);
+    }
+
+    res
+}
+
 pub fn btf_iterate_over_names_chain(
     btf: &Btf,
     func: ResolvedBtfItem,
-    names_chain: &Vec<&str>,
+    names_chain_str: &str,
 ) -> Option<ResolvedBtfItem> {
-    let mut names_iter = names_chain.iter().peekable();
+    let mut names_chain_vec = chain_str_to_tokens(names_chain_str);
+    if names_chain_vec.len() >= 2 && names_chain_vec[0] == "args" && names_chain_vec[1] == "." {
+        // Remove "args."
+        names_chain_vec.remove(0);
+        names_chain_vec.remove(0);
+    }
+
+    let mut names_iter = names_chain_vec.iter().peekable();
 
     if let Some(first_name) = names_iter.next() {
         let func_proto = match btf.resolve_type_by_id(func.type_id).unwrap() {
@@ -360,6 +399,16 @@ mod tests {
     }
 
     #[test]
+    fn test_chain_str_to_tokens() {
+        assert!(chain_str_to_tokens("args") == vec!["args"]);
+        assert!(chain_str_to_tokens("args.") == vec!["args", "."]);
+        assert!(chain_str_to_tokens("xxx->yyy") == vec!["xxx", "->", "yyy"]);
+        assert!(chain_str_to_tokens("a.b.c.d") == vec!["a", ".", "b", ".", "c", ".", "d"]);
+        assert!(
+            chain_str_to_tokens("args.f1.f2->f3") == vec!["args", ".", "f1", ".", "f2", "->", "f3"]
+        );
+    }
+    #[test]
     fn test_resolve() {
         let btf = btf_setup_module("vmlinux").unwrap();
 
@@ -385,9 +434,9 @@ mod tests {
         let btf = btf_setup_module("vmlinux").unwrap();
 
         let base = btf_resolve_func(&btf, "alloc_pid").unwrap();
-        let names_chain = vec!["ns", "->", "rcu", ".", "next"];
 
-        let resolved = btf_iterate_over_names_chain(&btf, base.clone(), &names_chain).unwrap();
+        let resolved =
+            btf_iterate_over_names_chain(&btf, base.clone(), "args.ns->rcu.next").unwrap();
         assert!(resolved.name == "callback_head");
         assert!(resolved.children_vec[0].name == "next");
     }
@@ -400,19 +449,17 @@ mod tests {
         let base = btf_resolve_func(&btf, "vfs_open").unwrap();
         assert!(base.name == "vfs_open");
 
-        let resolved = btf_iterate_over_names_chain(&btf, base.clone(), &Vec::new()).unwrap();
+        let resolved = btf_iterate_over_names_chain(&btf, base.clone(), "").unwrap();
         assert!(resolved.name == "vfs_open");
         assert!(resolved.children_vec.len() == 2);
         assert!(resolved.children_vec[0].name == "path");
 
-        let names_chain = vec!["path"];
-        let resolved = btf_iterate_over_names_chain(&btf, base.clone(), &names_chain).unwrap();
+        let resolved = btf_iterate_over_names_chain(&btf, base.clone(), "path").unwrap();
         assert!(resolved.name == "path");
         assert!(resolved.type_vec == vec!["const", "struct", "path", "*"]);
         assert!(resolved.children_vec.len() > 0);
 
-        let names_chain = vec!["path", "->", "dentry", "->", "d_inode"];
-        let resolved = btf_iterate_over_names_chain(&btf, base, &names_chain).unwrap();
+        let resolved = btf_iterate_over_names_chain(&btf, base, "path->dentry->d_inode").unwrap();
         assert!(resolved.name == "inode");
         assert!(resolved.children_vec.len() > 0);
 
@@ -439,14 +486,17 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    // #[ignore]
     fn test_resolve_rt2800_link_tuner() {
         let btf = btf_setup_module("rt2800lib").unwrap();
-
         let base = btf_resolve_func(&btf, "rt2800_link_tuner").unwrap();
-        let names_chain = vec!["qual", "->"];
+        let resolved = btf_iterate_over_names_chain(&btf, base.clone(), "qual->").unwrap();
 
-        let resolved = btf_iterate_over_names_chain(&btf, base.clone(), &names_chain).unwrap();
-        println!("{resolved:?}");
+        let vgc_level = resolved
+            .children_vec
+            .iter()
+            .find(|&r| r.name == "vgc_level")
+            .unwrap();
+        assert!(vgc_level.type_vec == vec!("u8"));
     }
 }
