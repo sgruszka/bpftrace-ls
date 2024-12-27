@@ -3,7 +3,7 @@ use btf_rs::*;
 use crate::log_dbg;
 use crate::log_mod::{self, BTFRE};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 #[allow(unused_variables)]
 #[allow(dead_code)]
 pub struct ResolvedBtfItem {

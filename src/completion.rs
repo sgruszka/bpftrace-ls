@@ -159,7 +159,7 @@ fn find_probe_args_by_command(probe: &str) -> String {
         v[0] = "kfunc";
     }
     let probe = v[..].join(":").to_string();
-    log_dbg!(COMPL, "Completing for probe vec: {:?}", v);
+    log_vdbg!(COMPL, "Completing for probe vec: {:?}", v);
 
     let mut probes_args_map = PROBES_ARGS_MAP.lock().unwrap();
 
@@ -531,4 +531,47 @@ pub fn encode_completion_resolve(_state: &State, id: u64, content: json::JsonVal
     };
 
     data.dump()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn btf_item_to_str(item: &ResolvedBtfItem) -> String {
+        let mut s = item.type_vec.join(" ").to_string();
+        s.push_str(" ");
+        s.push_str(&item.name);
+        s
+    }
+
+    #[test]
+    fn test_find_probe_args() {
+        let s = "kfunc:rt2800lib:rt2800_link_tuner";
+
+        let args_by_cmd = find_probe_args_by_command(s);
+        let args_by_btf = find_kfunc_args_by_btf(s);
+
+        let resolved_btf = if let Some((_module, resolved_btf)) = args_by_btf {
+            resolved_btf
+        } else {
+            assert!(false);
+            ResolvedBtfItem::default()
+        };
+
+        let mut n = 0;
+        for (i, arg) in args_by_cmd.lines().enumerate() {
+            if i == 0 {
+                assert!(arg == s);
+                continue;
+            }
+
+            assert!(resolved_btf.children_vec.len() > i);
+
+            let btf_item = &resolved_btf.children_vec[i - 1];
+            println!("'{}'", arg.trim());
+            println!("'{}'", btf_item_to_str(btf_item).trim());
+            assert!(arg.trim() == btf_item_to_str(btf_item));
+            n += 1;
+        }
+        assert!(resolved_btf.children_vec.len() == n);
+    }
 }
