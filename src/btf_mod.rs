@@ -155,34 +155,56 @@ fn resolve_func_parameters(btf: &Btf, func: btf::Func, item: &mut ResolvedBtfIte
         }
     };
 
-    for i in 0..proto.parameters.len() {
-        // TODO parameters diffrent than pointers to structure
-        let ptr = match btf.resolve_chained_type(&proto.parameters[i]).unwrap() {
-            Type::Const(c) => {
-                let ptr = match btf.resolve_chained_type(&c).unwrap() {
-                    Type::Ptr(ptr) => ptr,
-                    x => {
-                        log_dbg!(BTFRE, "Resolved type is not a pointer, is {:?}", x);
-                        continue;
-                    }
-                };
-                ptr
-            }
-            Type::Ptr(ptr) => ptr,
-            x => {
-                log_dbg!(BTFRE, "Resolved type is not a pointer, is {:?}", x);
-                continue;
-            }
-        };
-
-        let mut parameter_item = ResolvedBtfItem {
-            name: btf.resolve_name(&proto.parameters[i]).unwrap_or_default(),
+    for param in proto.parameters {
+        let mut param_item = ResolvedBtfItem {
+            name: btf.resolve_name(&param).unwrap_or_default(),
             type_vec: Vec::new(),
             type_id: 0,
             children_vec: Vec::new(),
         };
-        resolve_pointer(&btf, &ptr, &mut parameter_item);
-        item.children_vec.push(parameter_item);
+
+        let mut type_id = param.get_type_id().unwrap_or_default();
+
+        loop {
+            if type_id == 0 {
+                break;
+            }
+
+            // TOOD: Fix unwrap();
+            match btf.resolve_type_by_id(type_id).unwrap() {
+                Type::Const(c) => {
+                    param_item.type_vec.push("const".to_string());
+                    type_id = c.get_type_id().unwrap_or_default();
+                    continue;
+                }
+                Type::Volatile(v) => {
+                    param_item.type_vec.push("volatile".to_string());
+                    type_id = v.get_type_id().unwrap_or_default();
+                    continue;
+                }
+                Type::Ptr(ptr) => {
+                    param_item.type_id = ptr.get_type_id().unwrap_or_default();
+                    resolve_pointer(&btf, &ptr, &mut param_item);
+                    break;
+                }
+                Type::Typedef(td) => {
+                    param_item.type_id = td.get_type_id().unwrap_or_default();
+                    get_typedef_type_vec(btf, &td, &mut param_item.type_vec);
+                    break;
+                }
+                Type::Int(i) => {
+                    param_item.type_id = i.get_type_id().unwrap_or_default();
+                    get_int_type_vec(btf, &i, &mut param_item.type_vec);
+                    break;
+                }
+                x => {
+                    log_dbg!(BTFRE, "Unhandled type {:?}", x);
+                    break;
+                }
+            }
+        }
+
+        item.children_vec.push(param_item);
     }
 }
 
