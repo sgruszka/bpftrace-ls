@@ -146,6 +146,48 @@ fn resolve_pointer(btf: &Btf, ptr: &btf::Ptr, item: &mut ResolvedBtfItem) {
     item.type_vec.push("*".to_string());
 }
 
+fn resolve_type_id(btf: &Btf, id: u32, param_item: &mut ResolvedBtfItem) {
+    let mut type_id = id;
+    loop {
+        if type_id == 0 {
+            break;
+        }
+
+        // TOOD: Fix unwrap();
+        match btf.resolve_type_by_id(type_id).unwrap() {
+            Type::Const(c) => {
+                param_item.type_vec.push("const".to_string());
+                type_id = c.get_type_id().unwrap_or_default();
+                continue;
+            }
+            Type::Volatile(v) => {
+                param_item.type_vec.push("volatile".to_string());
+                type_id = v.get_type_id().unwrap_or_default();
+                continue;
+            }
+            Type::Ptr(ptr) => {
+                param_item.type_id = ptr.get_type_id().unwrap_or_default();
+                resolve_pointer(&btf, &ptr, param_item);
+                break;
+            }
+            Type::Typedef(td) => {
+                param_item.type_id = td.get_type_id().unwrap_or_default();
+                get_typedef_type_vec(btf, &td, &mut param_item.type_vec);
+                break;
+            }
+            Type::Int(i) => {
+                param_item.type_id = i.get_type_id().unwrap_or_default();
+                get_int_type_vec(btf, &i, &mut param_item.type_vec);
+                break;
+            }
+            x => {
+                log_dbg!(BTFRE, "Unhandled type {:?}", x);
+                break;
+            }
+        }
+    }
+}
+
 fn resolve_func_parameters(btf: &Btf, func: btf::Func, item: &mut ResolvedBtfItem) {
     let proto = match btf.resolve_chained_type(&func).unwrap() {
         Type::FuncProto(proto) => proto,
@@ -155,6 +197,8 @@ fn resolve_func_parameters(btf: &Btf, func: btf::Func, item: &mut ResolvedBtfIte
         }
     };
 
+    let ret_type_id = proto.return_type_id();
+
     for param in proto.parameters {
         let mut param_item = ResolvedBtfItem {
             name: btf.resolve_name(&param).unwrap_or_default(),
@@ -163,48 +207,20 @@ fn resolve_func_parameters(btf: &Btf, func: btf::Func, item: &mut ResolvedBtfIte
             children_vec: Vec::new(),
         };
 
-        let mut type_id = param.get_type_id().unwrap_or_default();
-
-        loop {
-            if type_id == 0 {
-                break;
-            }
-
-            // TOOD: Fix unwrap();
-            match btf.resolve_type_by_id(type_id).unwrap() {
-                Type::Const(c) => {
-                    param_item.type_vec.push("const".to_string());
-                    type_id = c.get_type_id().unwrap_or_default();
-                    continue;
-                }
-                Type::Volatile(v) => {
-                    param_item.type_vec.push("volatile".to_string());
-                    type_id = v.get_type_id().unwrap_or_default();
-                    continue;
-                }
-                Type::Ptr(ptr) => {
-                    param_item.type_id = ptr.get_type_id().unwrap_or_default();
-                    resolve_pointer(&btf, &ptr, &mut param_item);
-                    break;
-                }
-                Type::Typedef(td) => {
-                    param_item.type_id = td.get_type_id().unwrap_or_default();
-                    get_typedef_type_vec(btf, &td, &mut param_item.type_vec);
-                    break;
-                }
-                Type::Int(i) => {
-                    param_item.type_id = i.get_type_id().unwrap_or_default();
-                    get_int_type_vec(btf, &i, &mut param_item.type_vec);
-                    break;
-                }
-                x => {
-                    log_dbg!(BTFRE, "Unhandled type {:?}", x);
-                    break;
-                }
-            }
-        }
-
+        let id = param.get_type_id().unwrap_or_default();
+        resolve_type_id(btf, id, &mut param_item);
         item.children_vec.push(param_item);
+    }
+
+    if ret_type_id > 0 {
+        let mut ret_item = ResolvedBtfItem {
+            name: "retval".to_string(),
+            type_vec: Vec::new(),
+            type_id: 0,
+            children_vec: Vec::new(),
+        };
+        resolve_type_id(btf, ret_type_id, &mut ret_item);
+        item.children_vec.push(ret_item);
     }
 }
 
@@ -473,8 +489,9 @@ mod tests {
 
         let resolved = btf_iterate_over_names_chain(&btf, base.clone(), "").unwrap();
         assert!(resolved.name == "vfs_open");
-        assert!(resolved.children_vec.len() == 2);
+        assert!(resolved.children_vec.len() == 3);
         assert!(resolved.children_vec[0].name == "path");
+        assert!(resolved.children_vec[2].name == "retval");
 
         let resolved = btf_iterate_over_names_chain(&btf, base.clone(), "args.path").unwrap();
         assert!(resolved.name == "path");

@@ -542,6 +542,7 @@ mod tests {
         s.push_str(&item.name);
         s
     }
+
     fn compare_btf_and_cmd(s: &str) {
         let args_by_cmd = find_probe_args_by_command(s);
         let args_by_btf = find_kfunc_args_by_btf(s);
@@ -553,9 +554,10 @@ mod tests {
             ResolvedBtfItem::default()
         };
 
-        for (i, c) in resolved_btf.children_vec.iter().enumerate() {
-            println!("{i}: '{}'", btf_item_to_str(c).trim());
-        }
+        // for (i, c) in resolved_btf.children_vec.iter().enumerate() {
+        //     println!("{i}: '{}'", btf_item_to_str(c).trim());
+        // }
+
         let mut n = 0;
         for (i, arg) in args_by_cmd.lines().enumerate() {
             if i == 0 {
@@ -576,7 +578,7 @@ mod tests {
     fn test_find_probe_args() {
         compare_btf_and_cmd("kfunc:rt2800lib:rt2800_link_tuner");
         compare_btf_and_cmd("kfunc:vmlinux:acpi_unregister_gsi");
-        // TODO handle return value
-        // compare_btf_and_cmd("kfunc:vmlinux:acpi_register_gsi");
+        compare_btf_and_cmd("kfunc:vmlinux:acpi_register_gsi");
+        compare_btf_and_cmd("kfunc:vmlinux:vfs_open");
     }
 }
