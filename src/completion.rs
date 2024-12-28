@@ -270,7 +270,7 @@ fn encode_completion_for_action(
 
             // let field = format!("args.{}", tokens[end]);
             let field = tokens[end];
-            let field_type = tokens[0..end - 1].join(" ").to_string();
+            let field_type = tokens[0..end].join(" ").to_string();
             let completion = object! {
                 "label": field,
                 "kind" : 5,
@@ -317,6 +317,40 @@ fn encode_completion_for_action(
     };
 
     Some(data)
+}
+
+fn func_proto_str(item: &ResolvedBtfItem) -> String {
+    let mut s = String::new();
+    let params = &item.children_vec;
+
+    let mut l = params.len();
+
+    if l > 0 && params[l - 1].name == "retval" {
+        s.push_str(&params[l - 1].type_vec.join(" ").to_string());
+        l -= 1;
+    } else {
+        s.push_str("void");
+    }
+
+    s.push_str(" ");
+    s.push_str(&item.name);
+
+    s.push_str("(");
+    for i in 0..l {
+        let p = &params[i];
+
+        s.push_str(&p.type_vec.join(" "));
+        if !s.ends_with("*") {
+            s.push_str(" ");
+        }
+        s.push_str(&p.name);
+        if i < l - 1 {
+            s.push_str(", ")
+        }
+    }
+    s.push_str(");");
+
+    s
 }
 
 static AVAILABE_TRACES: OnceCell<String> = OnceCell::new();
@@ -376,19 +410,31 @@ fn encode_completion_for_line(id: u64, prefix: &str, line_str: &str) -> Option<j
                 };
 
                 let kind = if match_tokens == trace_tokens.len() - 1 {
-                    5 // Field
+                    3 // Function
                 } else {
                     9 // Module
                 };
 
-                log_vdbg!(COMPL, "Adding complete item: {label}");
-
-                let item = object! {
+                let mut item = object! {
                     "label": label,
                     "kind": kind,
-                    "detail": "TODO",
-                    "documentation": "need better documentation",
+                    // "detail": "TODO",
+                    // "documentation": "need better documentation",
                 };
+
+                if trace_tokens[0] == "kfunc" && kind == 3 {
+                    if let Some((_module, resolved_btf)) = find_kfunc_args_by_btf(&trace_line) {
+                        item["detail"] = func_proto_str(&resolved_btf).into();
+                    }
+                }
+
+                log_vdbg!(
+                    COMPL,
+                    "Adding complete item: {} : {}",
+                    label,
+                    item["detail"].to_string()
+                );
+
                 let _ = items.push(item);
                 count -= 1;
                 if count < 0 {
@@ -518,10 +564,11 @@ pub fn encode_completion(state: &State, id: u64, content: json::JsonValue) -> St
 }
 
 pub fn encode_completion_resolve(_state: &State, id: u64, content: json::JsonValue) -> String {
-    log_vdbg!(COMPL, "Copletion resolve for: {}", content);
+    log_dbg!(COMPL, "Completion resolve for: {}", content);
 
-    let mut params = content["params"].clone();
-    params["documentation"] = "Do this MARKUP".into();
+    let params = content["params"].clone();
+    // TOOD: use clangd to get documentation ?
+    // params["documentation"] = "Do this MARKUP".into();
     log_dbg!(COMPL, "documentation {}", params["documentation"]);
 
     let data = object! {
