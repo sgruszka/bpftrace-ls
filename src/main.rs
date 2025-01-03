@@ -19,7 +19,7 @@ mod completion;
 pub mod log_mod;
 pub mod btf_mod;
 
-use log_mod::{DIAGN, HOVER, NOTIF, PROTO, VERBOSE_DEBUG};
+use log_mod::{DIAGN, NOTIF, PROTO, VERBOSE_DEBUG};
 
 #[derive(Debug)]
 enum MessageType {
@@ -82,7 +82,7 @@ fn handle_notification(
 fn encode_initalize_result(id: u64) -> String {
     let capabilities = object! {
         "textDocumentSync": 1,
-        // "hoverProvider": true,
+        "hoverProvider": true,
         "definitionProvider": true,
         // "codeActionProvider": true,
         "completionProvider": {
@@ -190,60 +190,6 @@ fn encode_code_action(_state: &State, id: u64, content: json::JsonValue) -> Stri
     data.dump()
 }
 
-// TODO implement correct hover and enable hoverProvider
-fn encode_hover(state: &State, id: u64, content: json::JsonValue) -> String {
-    log_dbg!(HOVER, "Received hover with data {}", content);
-
-    let position = &content["params"]["position"];
-    let line_nr = position["line"].as_usize().unwrap();
-    let char_nr = position["character"].as_usize().unwrap();
-
-    let uri = &content["params"]["textDocument"]["uri"].to_string();
-    let mut from_line = String::new();
-    if let Some(text) = state.get(uri) {
-        log_err!("This is the text '{}'", text);
-
-        for (i, line) in text.lines().enumerate() {
-            if i == line_nr {
-                from_line = line.to_string();
-            }
-        }
-    }
-
-    let mut found = "";
-
-    if from_line.len() > char_nr {
-        let mut l = 0;
-        let mut r = from_line.len();
-        for (i, c) in from_line.chars().enumerate() {
-            if i == char_nr && c.is_whitespace() {
-                found = "What do you want?";
-                break;
-            }
-            if c.is_whitespace() {
-                if i <= char_nr {
-                    l = i;
-                } else {
-                    r = i;
-                    break;
-                }
-            }
-        }
-        if found == "" {
-            found = &from_line[l..r];
-        }
-    }
-
-    let data = object! {
-        "id" : id,
-        "jasonrpc": JSON_RPC_VERSION,
-        "result": {
-            "contents": format!("This is hover for {} at line {}:{}: '{}' found {}", uri, line_nr, char_nr, from_line, found),
-        },
-    };
-
-    data.dump()
-}
 // Parse single line errors:
 // stdin:6:60-69: ERROR: str() expects an integer or a pointer type as first argument (struct _tracepoint_syscalls_sys_exit_bpf provided)
 fn handle_single_line_error(mut line_nr: usize, tokens: &Vec<&str>) -> json::JsonValue {
@@ -370,7 +316,7 @@ fn encode_message(state: &State, id: u64, method: &str, content: json::JsonValue
     let resp = match &method[..] {
         "initialize" => encode_initalize_result(id),
         "shutdown" => encode_shutdown(id),
-        "textDocument/hover" => encode_hover(state, id, content),
+        "textDocument/hover" => completion::encode_hover(state, id, content),
         "textDocument/definition" => encode_definition(state, id, content),
         "textDocument/codeAction" => encode_code_action(state, id, content),
         "textDocument/completion" => completion::encode_completion(state, id, content),

@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use crate::btf_mod::{
     btf_iterate_over_names_chain, btf_resolve_func, btf_setup_module, ResolvedBtfItem,
 };
-use crate::log_mod::{self, COMPL, VERBOSE_DEBUG};
+use crate::log_mod::{self, COMPL, HOVER, VERBOSE_DEBUG};
 use crate::{log_dbg, log_vdbg};
 use crate::{State, JSON_RPC_VERSION};
 use btf_rs::Btf;
@@ -578,6 +578,74 @@ pub fn encode_completion_resolve(_state: &State, id: u64, content: json::JsonVal
         "jasonrpc": JSON_RPC_VERSION,
         "result": params,
     };
+
+    data.dump()
+}
+
+pub fn encode_hover(state: &State, id: u64, content: json::JsonValue) -> String {
+    log_dbg!(HOVER, "Received hover with data {}", content);
+
+    let position = &content["params"]["position"];
+    let line_nr = position["line"].as_usize().unwrap();
+    let char_nr = position["character"].as_usize().unwrap();
+
+    let uri = &content["params"]["textDocument"]["uri"].to_string();
+    let mut from_line = String::new();
+    if let Some(text) = state.get(uri) {
+        log_vdbg!(HOVER, "This is the text:\n'{}'", text);
+
+        for (i, line) in text.lines().enumerate() {
+            if i == line_nr {
+                from_line = line.to_string();
+            }
+        }
+    }
+
+    log_dbg!(HOVER, "Hover for line {}", from_line);
+
+    let mut found = "";
+
+    if from_line.len() > char_nr {
+        let mut l = 0;
+        let mut r = from_line.len();
+        for (i, c) in from_line.chars().enumerate() {
+            if i == char_nr && c.is_whitespace() {
+                found = "What do you want?";
+                break;
+            }
+            if c.is_whitespace() {
+                if i <= char_nr {
+                    l = i;
+                } else {
+                    r = i;
+                    break;
+                }
+            }
+        }
+        if found == "" {
+            found = &from_line[l..r];
+        }
+    }
+
+    log_dbg!(HOVER, "Found hover item: {}", found);
+
+    let mut data = object! {
+          "id" : id,
+          "jasonrpc": JSON_RPC_VERSION,
+    };
+
+    if found.starts_with("kfunc:") {
+        let args_by_btf = find_kfunc_args_by_btf(found);
+        if let Some((_module, resolved_btf)) = args_by_btf {
+            data = object! {
+                  "id" : id,
+                  "jasonrpc": JSON_RPC_VERSION,
+                  "result": {
+                      "contents": func_proto_str(&resolved_btf),
+                  },
+            };
+        }
+    }
 
     data.dump()
 }
