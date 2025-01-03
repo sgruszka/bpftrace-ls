@@ -591,7 +591,13 @@ pub fn encode_hover(state: &State, id: u64, content: json::JsonValue) -> String 
 
     let uri = &content["params"]["textDocument"]["uri"].to_string();
     let mut from_line = String::new();
-    if let Some(text) = state.get(uri) {
+
+    let mut data = object! {
+          "id" : id,
+          "jasonrpc": JSON_RPC_VERSION,
+    };
+
+    let text = if let Some(text) = state.get(uri) {
         log_vdbg!(HOVER, "This is the text:\n'{}'", text);
 
         for (i, line) in text.lines().enumerate() {
@@ -599,7 +605,10 @@ pub fn encode_hover(state: &State, id: u64, content: json::JsonValue) -> String 
                 from_line = line.to_string();
             }
         }
-    }
+        text
+    } else {
+        return data.dump();
+    };
 
     log_dbg!(HOVER, "Hover for line {}", from_line);
 
@@ -629,11 +638,6 @@ pub fn encode_hover(state: &State, id: u64, content: json::JsonValue) -> String 
 
     log_dbg!(HOVER, "Found hover item: {}", found);
 
-    let mut data = object! {
-          "id" : id,
-          "jasonrpc": JSON_RPC_VERSION,
-    };
-
     if found.starts_with("kfunc:") {
         let args_by_btf = find_kfunc_args_by_btf(found);
         if let Some((_module, resolved_btf)) = args_by_btf {
@@ -645,6 +649,10 @@ pub fn encode_hover(state: &State, id: u64, content: json::JsonValue) -> String 
                   },
             };
         }
+    } else if is_action_block(text, line_nr, char_nr) {
+        let probe = find_probe_for_action(text, line_nr);
+        let probe_args = find_probe_args_by_command(&probe);
+        log_dbg!(HOVER, "Probe {} with args:\n{}", probe, probe_args);
     }
 
     data.dump()
