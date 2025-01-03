@@ -564,6 +564,7 @@ pub fn encode_completion(state: &State, id: u64, content: json::JsonValue) -> St
 }
 
 pub fn encode_completion_resolve(_state: &State, id: u64, content: json::JsonValue) -> String {
+    // TODO
     log_dbg!(COMPL, "Completion resolve for: {}", content);
 
     let params = content["params"].clone();
