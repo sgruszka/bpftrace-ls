@@ -270,12 +270,13 @@ fn encode_completion_for_action(
 
             // let field = format!("args.{}", tokens[end]);
             let field = tokens[end];
-            let field_type = tokens[0..end].join(" ").to_string();
+            let _field_type = tokens[0..end].join(" ").to_string();
             let completion = object! {
                 "label": field,
                 "kind" : 5,
-                "detail" : field_type.clone(),
-                "documentation" : field_type,
+                "detail" : arg, //field_type.clone(),
+                // TODO
+                // "documentation" : field_type,
             };
             let _ = items.push(completion);
         }
