@@ -129,6 +129,7 @@ fn argument_next_item(
 
     results
 }
+
 fn find_probe_for_action(text: &str, line_nr: usize) -> String {
     if let Some(line) = text.lines().nth(line_nr) {
         if let Some(char_nr) = line.find("{") {
@@ -582,6 +583,38 @@ pub fn encode_completion_resolve(_state: &State, id: u64, content: json::JsonVal
     data.dump()
 }
 
+fn find_hover_str<LF, RF>(line: &str, char_nr: usize, lcond: LF, rcond: RF) -> String
+where
+    LF: Fn(char) -> bool,
+    RF: Fn(char) -> bool,
+{
+    let mut found = "";
+
+    if line.len() > char_nr {
+        let mut l = 0;
+        let mut r = line.len();
+        for (i, c) in line.chars().enumerate() {
+            if i == char_nr && lcond(c) {
+                return "".to_string();
+            }
+
+            if lcond(c) && i <= char_nr {
+                l = i + 1;
+            }
+
+            if rcond(c) && i > char_nr {
+                r = i;
+                break;
+            }
+        }
+        if found == "" && l < r {
+            found = &line[l..r];
+        }
+    }
+
+    found.to_string()
+}
+
 pub fn encode_hover(state: &State, id: u64, content: json::JsonValue) -> String {
     log_dbg!(HOVER, "Received hover with data {}", content);
 
@@ -612,34 +645,16 @@ pub fn encode_hover(state: &State, id: u64, content: json::JsonValue) -> String 
 
     log_dbg!(HOVER, "Hover for line {}", from_line);
 
-    let mut found = "";
-
-    if from_line.len() > char_nr {
-        let mut l = 0;
-        let mut r = from_line.len();
-        for (i, c) in from_line.chars().enumerate() {
-            if i == char_nr && c.is_whitespace() {
-                found = "What do you want?";
-                break;
-            }
-            if c.is_whitespace() {
-                if i <= char_nr {
-                    l = i;
-                } else {
-                    r = i;
-                    break;
-                }
-            }
-        }
-        if found == "" {
-            found = &from_line[l..r];
-        }
-    }
-
+    let found = find_hover_str(
+        &from_line,
+        char_nr,
+        |c| c.is_whitespace(),
+        |c| c.is_whitespace(),
+    );
     log_dbg!(HOVER, "Found hover item: {}", found);
 
     if found.starts_with("kfunc:") {
-        let args_by_btf = find_kfunc_args_by_btf(found);
+        let args_by_btf = find_kfunc_args_by_btf(&found);
         if let Some((_module, resolved_btf)) = args_by_btf {
             data = object! {
                   "id" : id,
@@ -653,6 +668,32 @@ pub fn encode_hover(state: &State, id: u64, content: json::JsonValue) -> String 
         let probe = find_probe_for_action(text, line_nr);
         let probe_args = find_probe_args_by_command(&probe);
         log_dbg!(HOVER, "Probe {} with args:\n{}", probe, probe_args);
+
+        let lterm = |c: char| -> bool { c.is_whitespace() || c == '{' || c == '(' };
+        let rterm =
+            |c: char| -> bool { c.is_whitespace() || c == '}' || c == ')' || c == '.' || c == '-' };
+        let mut found = find_hover_str(&from_line, char_nr, lterm, rterm);
+        log_dbg!(HOVER, "Hover found args string {}", found);
+
+        if found == "args" {
+            found.push('.');
+        }
+        let btf_probe_args = find_kfunc_args_by_btf(&probe);
+        if let Some((module, resolved_btf)) = btf_probe_args {
+            log_dbg!(HOVER, "Resolved BTF {:?}", resolved_btf);
+            let args = argument_next_item(module, resolved_btf, &found);
+
+            // args_as_string.push_str(&args.join("\n"));
+            log_dbg!(HOVER, "Hover args:\n{:?}", args.join("\n"));
+
+            data = object! {
+                  "id" : id,
+                  "jasonrpc": JSON_RPC_VERSION,
+                  "result": {
+                      "contents": args.join("\n"),
+                  },
+            };
+        }
     }
 
     data.dump()
