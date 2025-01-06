@@ -90,11 +90,33 @@ fn is_argument(line_str: &str, char_nr: usize, args: &mut String) -> bool {
     res
 }
 
+fn btf_item_to_str(item: &ResolvedBtfItem) -> String {
+    let mut s = item.type_vec.join(" ").to_string();
+    s.push_str(" ");
+    s.push_str(&item.name);
+    s
+}
+
+fn children_to_vec_str(resolved: &ResolvedBtfItem) -> Vec<String> {
+    let mut results: Vec<String> = Vec::new();
+    for child in &resolved.children_vec[..] {
+        let mut res_str = String::new();
+        for t in child.type_vec.iter() {
+            res_str.push_str(t);
+            res_str.push_str(" ");
+        }
+        res_str.push_str(&child.name);
+        results.push(res_str);
+    }
+
+    results
+}
+
 fn argument_next_item(
     module: String,
     resolved_func: ResolvedBtfItem,
     this_argument: &str,
-) -> Vec<String> {
+) -> ResolvedBtfItem {
     // log_dbg!(COMPL, "MODULE {}", module);
     // log_dbg!(COMPL, "RESOLVED FUNC {:?}", resolved_func);
     // log_dbg!(COMPL, "THIS_ARGUMENT {}", this_argument);
@@ -112,22 +134,13 @@ fn argument_next_item(
 
     let module_btf_map = MODULE_BTF_MAP.lock().unwrap();
 
-    let mut results: Vec<String> = Vec::new();
     if let Some(btf) = module_btf_map.get(&module) {
         if let Some(resolved) = btf_iterate_over_names_chain(&btf, resolved_func, this_argument) {
-            for child in resolved.children_vec {
-                let mut res_str = String::new();
-                for t in child.type_vec.iter() {
-                    res_str.push_str(t);
-                    res_str.push_str(" ");
-                }
-                res_str.push_str(&child.name);
-                results.push(res_str);
-            }
+            return resolved;
         }
     }
 
-    results
+    ResolvedBtfItem::default()
 }
 
 fn find_probe_for_action(text: &str, line_nr: usize) -> String {
@@ -254,7 +267,8 @@ fn encode_completion_for_action(
         if let Some(first_arg_line) = probe_args_iter.next() {
             if !this_argument.ends_with("args.") && first_arg_line.starts_with("kfunc") {
                 if let Some((module, resolved_btf)) = btf_probe_args {
-                    let args = argument_next_item(module, resolved_btf, &this_argument);
+                    let arg_btf = argument_next_item(module, resolved_btf, &this_argument);
+                    let args = children_to_vec_str(&arg_btf);
 
                     args_as_string.push_str(&args.join("\n"));
                     probe_args_iter = args_as_string.lines();
@@ -680,17 +694,23 @@ pub fn encode_hover(state: &State, id: u64, content: json::JsonValue) -> String 
         }
         let btf_probe_args = find_kfunc_args_by_btf(&probe);
         if let Some((module, resolved_btf)) = btf_probe_args {
-            log_dbg!(HOVER, "Resolved BTF {:?}", resolved_btf);
-            let args = argument_next_item(module, resolved_btf, &found);
+            // log_dbg!(HOVER, "Resolved BTF {:?}", resolved_btf);
+            let arg_btf = argument_next_item(module, resolved_btf, &found);
+            // log_dbg!(HOVER, "ARG BTF {:?}", arg_btf);
+            let mut hover = btf_item_to_str(&arg_btf);
+            let args = children_to_vec_str(&arg_btf);
 
-            // args_as_string.push_str(&args.join("\n"));
-            log_dbg!(HOVER, "Hover args:\n{:?}", args.join("\n"));
+            hover.push_str("\n");
+            hover.push_str("\n");
+            hover.push_str(&args.join("\n"));
+
+            log_dbg!(HOVER, "Hover:\n{:?}", hover);
 
             data = object! {
                   "id" : id,
                   "jasonrpc": JSON_RPC_VERSION,
                   "result": {
-                      "contents": args.join("\n"),
+                      "contents": hover,
                   },
             };
         }
@@ -702,13 +722,6 @@ pub fn encode_hover(state: &State, id: u64, content: json::JsonValue) -> String 
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn btf_item_to_str(item: &ResolvedBtfItem) -> String {
-        let mut s = item.type_vec.join(" ").to_string();
-        s.push_str(" ");
-        s.push_str(&item.name);
-        s
-    }
-
     fn compare_btf_and_cmd(s: &str) {
         let args_by_cmd = find_probe_args_by_command(s);
         let args_by_btf = find_kfunc_args_by_btf(s);
