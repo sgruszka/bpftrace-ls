@@ -232,12 +232,13 @@ fn resolve_parameter(btf: &Btf, param: &btf::Parameter) -> ResolvedBtfItem {
         children_vec: Vec::new(),
     };
 
-    // TODO parameters diffrent than pointers to structure
+    // TODO other parameters types, merge with resolve_struct_member
     match btf.resolve_chained_type(param).unwrap() {
         Type::Ptr(ptr) => resolve_pointer(btf, &ptr, &mut parameter_item),
-        // Type::Int(i) => resolve_integer(btf, &i, &mut parameter_item),
+        Type::Int(i) => get_int_type_vec(btf, &i, &mut parameter_item.type_vec),
+        Type::Typedef(t) => get_typedef_type_vec(btf, &t, &mut parameter_item.type_vec),
         x => {
-            log_dbg!(BTFRE, "Resolved type is not a pointer, is {:?}", x);
+            log_dbg!(BTFRE, "Unhandled type {:?}", x);
             return parameter_item;
         }
     };
@@ -361,7 +362,7 @@ pub fn btf_iterate_over_names_chain(
                 r.type_vec = resolved_param.type_vec;
                 return Some(r);
             } else {
-                return None;
+                return Some(resolved_param);
             }
         }
 
