@@ -507,7 +507,7 @@ mod tests {
         let i_state = resolved
             .children_vec
             .iter()
-            .find(|&r| r.name == "i_state")
+            .find(|&r| r.name == "i_ino")
             .unwrap();
         assert!(i_state.type_vec == vec!("long unsigned int"));
 
