@@ -4,6 +4,7 @@ use std::{
     collections::HashMap,
     io::{self, Read, Write},
     process::Command,
+    thread,
     time::Instant,
 };
 
@@ -439,6 +440,8 @@ fn main() {
     let mut error_count = 0;
     let mut state: HashMap<String, String> = HashMap::new();
 
+    let completion_init = thread::spawn(completion::init_available_traces);
+
     // TODO handle shutdown
     loop {
         match recv_message() {
@@ -456,6 +459,12 @@ fn main() {
                         // TOOD response with InvalidRequest after shutdown
                         // if method == "shutdown" {
                         //     break;
+                        // }
+                        //
+                        // TODO make this work
+                        // if method == "initialize" && !completion_init_done {
+                        //     completion_init_done = true;
+                        //     completion_init.join().unwrap();
                         // }
                     }
                     MessageType::Response => (),
@@ -488,4 +497,5 @@ fn main() {
             }
         }
     }
+    let _ = completion_init.join();
 }

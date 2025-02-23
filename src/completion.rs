@@ -374,7 +374,23 @@ fn func_proto_str(item: &ResolvedBtfItem) -> String {
     s
 }
 
+// TODO: convert to std::sync::OnceLock
 static AVAILABE_TRACES: OnceCell<String> = OnceCell::new();
+
+pub fn init_available_traces() {
+    // TODO is OneCell thread safe
+    if let Some(_traces) = AVAILABE_TRACES.get() {
+        return;
+    } else {
+        if let Ok(output) = Command::new("sudo").arg("bpftrace").arg("-l").output() {
+            if let Ok(traces) = String::from_utf8(output.stdout) {
+                let _ = AVAILABE_TRACES.set(traces);
+                //available_traces = AVAILABE_TRACES.get().unwrap();
+                log_dbg!(COMPL, "Initalized available traces");
+            }
+        }
+    }
+}
 
 fn encode_completion_for_line(id: u64, prefix: &str, line_str: &str) -> Option<json::JsonValue> {
     if !line_str.trim().starts_with(&prefix) {
