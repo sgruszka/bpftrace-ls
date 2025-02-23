@@ -160,6 +160,16 @@ fn find_probe_for_action(text: &str, line_nr: usize) -> String {
     "".to_string()
 }
 
+fn kprobe_to_kfunc(probe: &str) -> String {
+    let mut v: Vec<&str> = probe.split(":").collect();
+    if v[0] == "kprobe" || v[0] == "kretprobe" {
+        v[0] = "kfunc";
+    }
+    let kfunc = v[..].join(":").to_string();
+
+    kfunc
+}
+
 fn find_probe_args_by_command(probe: &str) -> String {
     if probe.is_empty() {
         return "".to_string();
@@ -168,12 +178,7 @@ fn find_probe_args_by_command(probe: &str) -> String {
     log_dbg!(COMPL, "Completing for probe: {}", probe);
 
     // Use kfunc for getting arguments, kprobe/kretprobe does not work
-    let mut v: Vec<&str> = probe.split(":").collect();
-    if v[0] == "kprobe" || v[0] == "kretprobe" {
-        v[0] = "kfunc";
-    }
-    let probe = v[..].join(":").to_string();
-    log_vdbg!(COMPL, "Completing for probe vec: {:?}", v);
+    let probe = kprobe_to_kfunc(probe);
 
     let mut probes_args_map = PROBES_ARGS_MAP.lock().unwrap();
 
