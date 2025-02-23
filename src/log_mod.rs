@@ -83,7 +83,7 @@ pub fn create_logger(filename: &str) -> Result<(), std::io::Error> {
     LOGGER
         .set(Logger {
             name: filename.to_string(),
-            mask: PROTO | HOVER, //COMPL | BTFRE,
+            mask: PROTO | COMPL, // HOVER | BTFRE,
         })
         .expect("Was already initalized");
     // Create / truncate the file every time we run
