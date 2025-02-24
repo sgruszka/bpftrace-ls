@@ -260,7 +260,7 @@ fn encode_completion_for_action(
 
     let mut this_argument = String::new();
     if is_argument(line_str, char_nr, &mut this_argument) {
-        log_dbg!(COMPL, "Searching arguments for probe: {}", probe);
+        log_dbg!(COMPL, "Complete for argument: {}", this_argument);
 
         let mut is_kfunc = false;
         if probe.starts_with("kprobe:")
