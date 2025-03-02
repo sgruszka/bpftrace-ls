@@ -239,7 +239,6 @@ fn find_kfunc_args_by_btf(kfunc: &str) -> Option<(String, ResolvedBtfItem)> {
 }
 
 fn encode_completion_for_action(
-    id: u64,
     text: &str,
     line_str: &str,
     line_nr: usize,
@@ -345,8 +344,6 @@ fn encode_completion_for_action(
     }
 
     let data = object! {
-        "id" : id,
-        "jasonrpc": JSON_RPC_VERSION,
         "result": {
             "isIncomplete": is_incomplete,
             "items": items,
@@ -408,7 +405,7 @@ pub fn init_available_traces() {
     }
 }
 
-fn encode_completion_for_line(id: u64, prefix: &str, line_str: &str) -> Option<json::JsonValue> {
+fn encode_completion_for_line(prefix: &str, line_str: &str) -> Option<json::JsonValue> {
     if !line_str.trim().starts_with(&prefix) {
         return None;
     }
@@ -499,8 +496,6 @@ fn encode_completion_for_line(id: u64, prefix: &str, line_str: &str) -> Option<j
     }
 
     let data = object! {
-        "id" : id,
-        "jasonrpc": JSON_RPC_VERSION,
         "result": {
             "isIncomplete": is_incomplete,
             "items": items,
@@ -510,7 +505,7 @@ fn encode_completion_for_line(id: u64, prefix: &str, line_str: &str) -> Option<j
     Some(data)
 }
 
-fn encode_completion_for_empty_line(id: u64) -> json::JsonValue {
+fn encode_completion_for_empty_line() -> json::JsonValue {
     // TODO provide complete list, code this compactly
     let completion_iter = object! {
         "label": "iter:",
@@ -562,8 +557,6 @@ fn encode_completion_for_empty_line(id: u64) -> json::JsonValue {
     };
 
     let data = object! {
-        "id" : id,
-        "jasonrpc": JSON_RPC_VERSION,
         "result": {
             "isIncomplete": false,
             "items": [
@@ -581,7 +574,7 @@ fn encode_completion_for_empty_line(id: u64) -> json::JsonValue {
     data
 }
 
-pub fn encode_completion(state: &State, id: u64, content: json::JsonValue) -> String {
+pub fn encode_completion(state: &State, content: json::JsonValue) -> json::JsonValue {
     let uri = &content["params"]["textDocument"]["uri"].to_string();
 
     let position = &content["params"]["position"];
@@ -593,8 +586,8 @@ pub fn encode_completion(state: &State, id: u64, content: json::JsonValue) -> St
 
     log_dbg!(COMPL, "Complete for line: '{}'", line_str);
 
-    if let Some(data) = encode_completion_for_action(id, &text, &line_str, line_nr, char_nr) {
-        return data.dump();
+    if let Some(data) = encode_completion_for_action(&text, &line_str, line_nr, char_nr) {
+        return data;
     }
     // TODO handle kretprobe kretfunc
     let prefixes = [
@@ -607,13 +600,13 @@ pub fn encode_completion(state: &State, id: u64, content: json::JsonValue) -> St
         "kfunc",
     ];
     for prefix in prefixes.iter() {
-        if let Some(data) = encode_completion_for_line(id, prefix, &line_str) {
-            return data.dump();
+        if let Some(data) = encode_completion_for_line(prefix, &line_str) {
+            return data;
         }
     }
 
-    let data = encode_completion_for_empty_line(id);
-    data.dump()
+    let data = encode_completion_for_empty_line();
+    data
 }
 
 pub fn encode_completion_resolve(_state: &State, id: u64, content: json::JsonValue) -> String {

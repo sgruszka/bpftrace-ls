@@ -337,7 +337,12 @@ fn encode_message(state: &State, id: u64, method: &str, content: json::JsonValue
             data["jasonrpc"] = JSON_RPC_VERSION.into();
             data.dump()
         }
-        "textDocument/completion" => completion::encode_completion(state, id, content),
+        "textDocument/completion" => {
+            let mut data = completion::encode_completion(state, content);
+            data["id"] = id.into();
+            data["jasonrpc"] = JSON_RPC_VERSION.into();
+            data.dump()
+        }
         "completionItem/resolve" => completion::encode_completion_resolve(state, id, content),
 
         _ => "".to_string(),
