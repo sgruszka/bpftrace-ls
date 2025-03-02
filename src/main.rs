@@ -306,53 +306,24 @@ fn publish_diagnostics(state: &State) -> String {
 }
 
 fn encode_message(state: &State, id: u64, method: &str, content: json::JsonValue) -> String {
-    let resp = match &method[..] {
-        "initialize" => {
-            let mut data = encode_initalize_result();
-            data["id"] = id.into();
-            data["jasonrpc"] = JSON_RPC_VERSION.into();
-            data.dump()
+    let mut data = match &method[..] {
+        "initialize" => encode_initalize_result(),
+        "shutdown" => encode_shutdown(),
+        "textDocument/hover" => completion::encode_hover(state, content),
+        "textDocument/definition" => encode_definition(state, content),
+        "textDocument/codeAction" => encode_code_action(state, content),
+        "textDocument/completion" => completion::encode_completion(state, content),
+        "completionItem/resolve" => completion::encode_completion_resolve(state, content),
+        unhandled_method => {
+            log_dbg!(PROTO, "No handler for method: {}", unhandled_method);
+            object! {}
         }
-        "shutdown" => {
-            let mut data = encode_shutdown();
-            data["id"] = id.into();
-            data["jasonrpc"] = JSON_RPC_VERSION.into();
-            data.dump()
-        }
-        "textDocument/hover" => {
-            let mut data = completion::encode_hover(state, content);
-            data["id"] = id.into();
-            data["jasonrpc"] = JSON_RPC_VERSION.into();
-            data.dump()
-        }
-        "textDocument/definition" => {
-            let mut data = encode_definition(state, content);
-            data["id"] = id.into();
-            data["jasonrpc"] = JSON_RPC_VERSION.into();
-            data.dump()
-        }
-        "textDocument/codeAction" => {
-            let mut data = encode_code_action(state, content);
-            data["id"] = id.into();
-            data["jasonrpc"] = JSON_RPC_VERSION.into();
-            data.dump()
-        }
-        "textDocument/completion" => {
-            let mut data = completion::encode_completion(state, content);
-            data["id"] = id.into();
-            data["jasonrpc"] = JSON_RPC_VERSION.into();
-            data.dump()
-        }
-        "completionItem/resolve" => {
-            let mut data = completion::encode_completion_resolve(state, content);
-            data["id"] = id.into();
-            data["jasonrpc"] = JSON_RPC_VERSION.into();
-            data.dump()
-        }
-
-        _ => "".to_string(),
     };
 
+    data["id"] = id.into();
+    data["jasonrpc"] = JSON_RPC_VERSION.into();
+
+    let resp = data.dump();
     format!("Content-Length: {}\r\n\r\n{}\n", resp.len(), resp)
 }
 
