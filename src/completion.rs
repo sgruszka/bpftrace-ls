@@ -666,7 +666,7 @@ where
     found.to_string()
 }
 
-pub fn encode_hover(state: &State, id: u64, content: json::JsonValue) -> String {
+pub fn encode_hover(state: &State, content: json::JsonValue) -> json::JsonValue {
     log_dbg!(HOVER, "Received hover with data {}", content);
 
     let position = &content["params"]["position"];
@@ -676,10 +676,7 @@ pub fn encode_hover(state: &State, id: u64, content: json::JsonValue) -> String 
     let uri = &content["params"]["textDocument"]["uri"].to_string();
     let mut from_line = String::new();
 
-    let mut data = object! {
-          "id" : id,
-          "jasonrpc": JSON_RPC_VERSION,
-    };
+    let mut data = object! {};
 
     let text = if let Some(text) = state.get(uri) {
         log_vdbg!(HOVER, "This is the text:\n'{}'", text);
@@ -691,7 +688,7 @@ pub fn encode_hover(state: &State, id: u64, content: json::JsonValue) -> String 
         }
         text
     } else {
-        return data.dump();
+        return data;
     };
 
     log_dbg!(HOVER, "Hover for line {}", from_line);
@@ -708,8 +705,6 @@ pub fn encode_hover(state: &State, id: u64, content: json::JsonValue) -> String 
         let args_by_btf = find_kfunc_args_by_btf(&found);
         if let Some((_module, resolved_btf)) = args_by_btf {
             data = object! {
-                  "id" : id,
-                  "jasonrpc": JSON_RPC_VERSION,
                   "result": {
                       "contents": func_proto_str(&resolved_btf),
                   },
@@ -744,8 +739,6 @@ pub fn encode_hover(state: &State, id: u64, content: json::JsonValue) -> String 
             log_dbg!(HOVER, "Hover:\n{:?}", hover);
 
             data = object! {
-                  "id" : id,
-                  "jasonrpc": JSON_RPC_VERSION,
                   "result": {
                       "contents": hover,
                   },
@@ -753,7 +746,7 @@ pub fn encode_hover(state: &State, id: u64, content: json::JsonValue) -> String 
         }
     }
 
-    data.dump()
+    data
 }
 
 #[cfg(test)]

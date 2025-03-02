@@ -116,7 +116,7 @@ fn encode_shutdown() -> json::JsonValue {
     data
 }
 
-fn encode_definition(_state: &State, id: u64, content: json::JsonValue) -> String {
+fn encode_definition(_state: &State, content: json::JsonValue) -> json::JsonValue {
     log_err!("Received definition with data {}", content);
     let uri = &content["params"]["textDocument"]["uri"].to_string();
 
@@ -127,8 +127,6 @@ fn encode_definition(_state: &State, id: u64, content: json::JsonValue) -> Strin
     let new_line_nr = if line_nr > 0 { line_nr - 1 } else { line_nr };
 
     let data = object! {
-        "id" : id,
-        "jasonrpc": JSON_RPC_VERSION,
         "result": {
             "uri": uri.to_string(),
             "range": {
@@ -138,7 +136,7 @@ fn encode_definition(_state: &State, id: u64, content: json::JsonValue) -> Strin
         },
     };
 
-    data.dump()
+    data
 }
 
 // TODO implement correct codeAction and enable codeActionProvider
@@ -323,8 +321,18 @@ fn encode_message(state: &State, id: u64, method: &str, content: json::JsonValue
             data["jasonrpc"] = JSON_RPC_VERSION.into();
             data.dump()
         }
-        "textDocument/hover" => completion::encode_hover(state, id, content),
-        "textDocument/definition" => encode_definition(state, id, content),
+        "textDocument/hover" => {
+            let mut data = completion::encode_hover(state, content);
+            data["id"] = id.into();
+            data["jasonrpc"] = JSON_RPC_VERSION.into();
+            data.dump()
+        }
+        "textDocument/definition" => {
+            let mut data = encode_definition(state, content);
+            data["id"] = id.into();
+            data["jasonrpc"] = JSON_RPC_VERSION.into();
+            data.dump()
+        }
         "textDocument/codeAction" => encode_code_action(state, id, content),
         "textDocument/completion" => completion::encode_completion(state, id, content),
         "completionItem/resolve" => completion::encode_completion_resolve(state, id, content),
