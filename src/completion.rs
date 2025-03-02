@@ -9,8 +9,8 @@ use crate::btf_mod::{
     btf_iterate_over_names_chain, btf_resolve_func, btf_setup_module, ResolvedBtfItem,
 };
 use crate::log_mod::{self, COMPL, HOVER, VERBOSE_DEBUG};
+use crate::State;
 use crate::{log_dbg, log_vdbg};
-use crate::{State, JSON_RPC_VERSION};
 use btf_rs::Btf;
 
 static PROBES_ARGS_MAP: Lazy<Mutex<HashMap<String, String>>> =
@@ -609,7 +609,7 @@ pub fn encode_completion(state: &State, content: json::JsonValue) -> json::JsonV
     data
 }
 
-pub fn encode_completion_resolve(_state: &State, id: u64, content: json::JsonValue) -> String {
+pub fn encode_completion_resolve(_state: &State, content: json::JsonValue) -> json::JsonValue {
     // TODO
     log_dbg!(COMPL, "Completion resolve for: {}", content);
 
@@ -619,12 +619,10 @@ pub fn encode_completion_resolve(_state: &State, id: u64, content: json::JsonVal
     log_dbg!(COMPL, "documentation {}", params["documentation"]);
 
     let data = object! {
-        "id" : id,
-        "jasonrpc": JSON_RPC_VERSION,
         "result": params,
     };
 
-    data.dump()
+    data
 }
 
 fn find_hover_str<LF, RF>(line: &str, char_nr: usize, lcond: LF, rcond: RF) -> String
