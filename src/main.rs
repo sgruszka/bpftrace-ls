@@ -140,7 +140,7 @@ fn encode_definition(_state: &State, content: json::JsonValue) -> json::JsonValu
 }
 
 // TODO implement correct codeAction and enable codeActionProvider
-fn encode_code_action(_state: &State, id: u64, content: json::JsonValue) -> String {
+fn encode_code_action(_state: &State, content: json::JsonValue) -> json::JsonValue {
     log_err!("Received codeAction with data {}", content);
     let uri = &content["params"]["textDocument"]["uri"].to_string();
 
@@ -177,12 +177,10 @@ fn encode_code_action(_state: &State, id: u64, content: json::JsonValue) -> Stri
     };
 
     let data = object! {
-        "id" : id,
-        "jasonrpc": JSON_RPC_VERSION,
         "result": [code_action],
     };
 
-    data.dump()
+    data
 }
 
 // Parse single line errors:
@@ -333,7 +331,12 @@ fn encode_message(state: &State, id: u64, method: &str, content: json::JsonValue
             data["jasonrpc"] = JSON_RPC_VERSION.into();
             data.dump()
         }
-        "textDocument/codeAction" => encode_code_action(state, id, content),
+        "textDocument/codeAction" => {
+            let mut data = encode_code_action(state, content);
+            data["id"] = id.into();
+            data["jasonrpc"] = JSON_RPC_VERSION.into();
+            data.dump()
+        }
         "textDocument/completion" => completion::encode_completion(state, id, content),
         "completionItem/resolve" => completion::encode_completion_resolve(state, id, content),
 
