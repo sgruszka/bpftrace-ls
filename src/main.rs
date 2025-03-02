@@ -80,7 +80,7 @@ fn handle_notification(
     NotificationAction::None
 }
 
-fn encode_initalize_result(id: u64) -> String {
+fn encode_initalize_result() -> json::JsonValue {
     let capabilities = object! {
         "textDocumentSync": 1,
         "hoverProvider": true,
@@ -99,25 +99,21 @@ fn encode_initalize_result(id: u64) -> String {
     };
 
     let data = object! {
-        "id" : id,
-        "jasonrpc": JSON_RPC_VERSION,
         "result": {
             "capabilities": capabilities,
             "serverInfo": server_info,
         },
     };
 
-    data.dump()
+    data
 }
 
-fn encode_shutdown(id: u64) -> String {
+fn encode_shutdown() -> json::JsonValue {
     let data = object! {
-        "id" : id,
-        "jasonrpc": JSON_RPC_VERSION,
         "result": null,
     };
 
-    data.dump()
+    data
 }
 
 fn encode_definition(_state: &State, id: u64, content: json::JsonValue) -> String {
@@ -315,8 +311,18 @@ fn publish_diagnostics(state: &State) -> String {
 
 fn encode_message(state: &State, id: u64, method: &str, content: json::JsonValue) -> String {
     let resp = match &method[..] {
-        "initialize" => encode_initalize_result(id),
-        "shutdown" => encode_shutdown(id),
+        "initialize" => {
+            let mut data = encode_initalize_result();
+            data["id"] = id.into();
+            data["jasonrpc"] = JSON_RPC_VERSION.into();
+            data.dump()
+        }
+        "shutdown" => {
+            let mut data = encode_shutdown();
+            data["id"] = id.into();
+            data["jasonrpc"] = JSON_RPC_VERSION.into();
+            data.dump()
+        }
         "textDocument/hover" => completion::encode_hover(state, id, content),
         "textDocument/definition" => encode_definition(state, id, content),
         "textDocument/codeAction" => encode_code_action(state, id, content),
