@@ -497,3 +497,19 @@ fn main() {
     }
     let _ = completion_init.join();
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_decode_message() {
+        let msg = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"general":{"positionEncodings":["utf-16"]}}}}"#;
+        let (msg_type, id, method, _content) = decode_message(msg.to_string());
+        match msg_type {
+            MessageType::Request => assert!(true),
+            _ => assert!(false),
+        }
+        assert!(id == 1);
+        assert!(method == "initialize");
+    }
+}
