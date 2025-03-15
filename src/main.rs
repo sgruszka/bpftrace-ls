@@ -438,7 +438,7 @@ fn main() {
     let mut error_count = 0;
     let mut state: HashMap<String, String> = HashMap::new();
 
-    let completion_init = thread::spawn(completion::init_available_traces);
+    let _completion_init = thread::spawn(completion::init_available_traces);
 
     // TODO handle shutdown
     loop {
@@ -459,11 +459,6 @@ fn main() {
                         //     break;
                         // }
                         //
-                        // TODO make this work
-                        // if method == "initialize" && !completion_init_done {
-                        //     completion_init_done = true;
-                        //     completion_init.join().unwrap();
-                        // }
                     }
                     MessageType::Response => (),
                     MessageType::Notification => {
@@ -495,7 +490,6 @@ fn main() {
             }
         }
     }
-    let _ = completion_init.join();
 }
 
 #[cfg(test)]
