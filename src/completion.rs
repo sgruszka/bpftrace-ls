@@ -436,12 +436,17 @@ fn encode_completion_for_line(prefix: &str, line_str: &str) -> Option<json::Json
     let mut count = max_count as i32;
     let mut duplicates: HashMap<String, u32> = HashMap::new();
 
+    let mut line_tokens: Vec<&str> = line_str.split(":").collect();
+    if line_str.trim().starts_with("kretfunc") || line_str.trim().starts_with("kretprobe") {
+        line_tokens[0] = "kfunc";
+    }
+    let search_line = line_tokens.join(":");
+
     for trace_line in available_traces.lines() {
-        if trace_line.trim().starts_with(line_str.trim()) {
+        if trace_line.trim().starts_with(search_line.trim()) {
             //TODO: save matched tokens ans skip duplicate lines here
 
             let trace_tokens: Vec<&str> = trace_line.split(":").collect();
-            let line_tokens: Vec<&str> = line_str.split(":").collect();
 
             let mut match_tokens = 0;
             for i in 0..std::cmp::min(trace_tokens.len(), line_tokens.len()) {
