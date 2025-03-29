@@ -505,69 +505,23 @@ fn encode_completion_for_line(prefix: &str, line_str: &str) -> Option<json::Json
     Some(data)
 }
 
-fn encode_completion_for_empty_line() -> json::JsonValue {
-    // TODO provide complete list, code this compactly
-    let completion_iter = object! {
-        "label": "iter:",
-        "kind" : 8,
-        "detail" : "TODO",
-        "documentation" : "need documentation",
-    };
+fn encode_completion_for_empty_line(prefixes: &[&str]) -> json::JsonValue {
+    let mut items = json::JsonValue::new_array();
 
-    let completion_kfunc = object! {
-        "label": "kfunc:",
-        "kind" : 8,
-        "detail" : "TODO",
-        "documentation" : "need documentation",
-    };
-
-    let completion_kprobe = object! {
-        "label": "kprobe:",
-        "kind" : 8,
-        "detail" : "TODO",
-        "documentation" : "need documentation",
-    };
-
-    let completion_rawtracepoint = object! {
-        "label": "rawtracepoint:",
-        "kind" : 8,
-        "detail" : "TODO",
-        "documentation" : "need documentation",
-    };
-
-    let completion_software = object! {
-        "label": "software:",
-        "kind" : 8,
-        "detail" : "TODO",
-        "documentation" : "need documentation",
-    };
-
-    let completion_tracepoint = object! {
-        "label": "tracepoint:",
-        "kind" : 8,
-        "detail" : "TODO",
-        "documentation" : "need documentation",
-    };
-
-    let completion_hardware = object! {
-        "label": "hardware:",
-        "kind": 8,
-        "detail": "TODO",
-        "documentation": "need better documentation",
-    };
+    for prefix in prefixes.iter() {
+        let prefix_item = object! {
+            "label": prefix.to_string(),
+            "kind": 8,
+            "detail": "TODO",
+            "documentation": "need better documentation"
+        };
+        let _ = items.push(prefix_item);
+    }
 
     let data = object! {
         "result": {
             "isIncomplete": false,
-            "items": [
-              completion_iter,
-              completion_hardware,
-              completion_tracepoint,
-              completion_kprobe,
-              completion_software,
-              completion_rawtracepoint,
-              completion_kfunc,
-            ],
+            "items": items,
         }
     };
 
@@ -589,15 +543,17 @@ pub fn encode_completion(state: &State, content: json::JsonValue) -> json::JsonV
     if let Some(data) = encode_completion_for_action(&text, &line_str, line_nr, char_nr) {
         return data;
     }
-    // TODO handle kretprobe kretfunc
+
     let prefixes = [
         "iter",
         "hardware",
         "tracepoint:",
         "kprobe",
+        "kretprobe",
         "software:",
         "rawtracepoint",
         "kfunc",
+        "kretfunc",
     ];
     for prefix in prefixes.iter() {
         if let Some(data) = encode_completion_for_line(prefix, &line_str) {
@@ -605,7 +561,7 @@ pub fn encode_completion(state: &State, content: json::JsonValue) -> json::JsonV
         }
     }
 
-    let data = encode_completion_for_empty_line();
+    let data = encode_completion_for_empty_line(&prefixes[..]);
     data
 }
 
