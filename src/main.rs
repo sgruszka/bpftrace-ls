@@ -4,6 +4,7 @@ use std::{
     collections::HashMap,
     io::{self, Read, Write},
     process::Command,
+    sync::mpsc,
     thread,
     time::Instant,
 };
@@ -33,6 +34,19 @@ enum NotificationAction {
     None,
     Exit,
     SendDiagnostics,
+}
+
+enum Direction {
+    FromClient,
+    ToClient,
+}
+
+struct LspMessage {
+    direction: Direction,
+    msg_type: MessageType,
+    id: u64,
+    method: String,
+    content: json::JsonValue,
 }
 
 fn handle_notification(
@@ -428,6 +442,58 @@ fn send_message(s: String) {
     }
 }
 
+fn thread_input(mpsc_tx: mpsc::Sender<LspMessage>) {
+    let mut error_count = 0;
+
+    loop {
+        match recv_message() {
+            Ok(msg) => {
+                let _start_time = Instant::now();
+                let (msg_type, id, method, content) = decode_message(msg);
+
+                let exit: bool = match &msg_type {
+                    MessageType::Notification => {
+                        if method == "exit" {
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    _ => false,
+                };
+
+                let lsp_msg = LspMessage {
+                    direction: Direction::FromClient,
+                    msg_type,
+                    id,
+                    method,
+                    content,
+                };
+
+                let res = mpsc_tx.send(lsp_msg);
+                if let Err(err) = res {
+                    log_err!("MPSC send error {}", err);
+                    break;
+                }
+
+                if exit {
+                    log_dbg!(PROTO, "Received exit notification");
+                    break;
+                }
+            }
+
+            Err(e) => {
+                log_err!("Read error {}", e);
+                error_count += 1;
+                if error_count >= 10 {
+                    log_err!("To many read errors, exiting ...");
+                    break;
+                }
+            }
+        }
+    }
+}
+
 fn main() {
     if let Err(e) = log_mod::create_logger("log.txt") {
         println!("Failed to create logger, error {e}");
@@ -435,57 +501,73 @@ fn main() {
 
     log_dbg!(PROTO, "{} {} started", PKG_NAME, PKG_VERSION);
 
-    let mut error_count = 0;
     let mut state: HashMap<String, String> = HashMap::new();
 
     let _completion_init = thread::spawn(completion::init_available_traces);
 
-    // TODO handle shutdown
-    loop {
-        match recv_message() {
-            Ok(msg) => {
-                let start_time = Instant::now();
-                let (msg_type, id, method, content) = decode_message(msg);
+    let (mpsc_tx, mpsc_rx) = mpsc::channel::<LspMessage>();
+    thread::spawn(move || thread_input(mpsc_tx));
 
-                match msg_type {
-                    MessageType::Request => {
-                        let s = encode_message(&state, id, &method, content);
-                        let time_diff = start_time.elapsed();
-                        log_dbg!(PROTO, "Response time {:?}", time_diff);
-                        log_vdbg!(PROTO, "Answer:\n{}", s);
-                        send_message(s);
-                        // TOOD response with InvalidRequest after shutdown
-                        // if method == "shutdown" {
-                        //     break;
-                        // }
-                        //
+    loop {
+        let mut lsp_msg: Option<LspMessage> = None;
+
+        match mpsc_rx.recv() {
+            Ok(mpsc_msg) => {
+                match mpsc_msg.direction {
+                    Direction::FromClient => {
+                        lsp_msg = Some(mpsc_msg);
                     }
-                    MessageType::Response => (),
-                    MessageType::Notification => {
-                        let notif_action = handle_notification(&mut state, method, content);
-                        match notif_action {
-                            NotificationAction::SendDiagnostics => {
-                                let s = publish_diagnostics(&state);
-                                log_dbg!(DIAGN, "Send diagnostics: {}", s);
-                                if s.len() > 0 {
-                                    send_message(s);
-                                }
-                            }
-                            NotificationAction::Exit => {
-                                log_dbg!(PROTO, "Exiting");
-                                break;
-                            }
-                            NotificationAction::None => {}
+
+                    Direction::ToClient => {}
+                };
+            }
+            Err(err) => {
+                log_err!("Subthread error {}", err);
+                break;
+            }
+        }
+
+        let m;
+        if lsp_msg.is_none() {
+            continue;
+        } else {
+            m = lsp_msg.unwrap();
+        };
+
+        let start_time = Instant::now();
+        let method = m.method;
+        let content = m.content;
+        let id = m.id;
+
+        match m.msg_type {
+            MessageType::Request => {
+                let s = encode_message(&state, id, &method, content);
+                let time_diff = start_time.elapsed();
+                log_dbg!(PROTO, "Response time {:?}", time_diff);
+                log_vdbg!(PROTO, "Answer:\n{}", s);
+                send_message(s);
+                // TOOD response with InvalidRequest after shutdown
+                // if method == "shutdown" {
+                //     break;
+                // }
+                //
+            }
+            MessageType::Response => (),
+            MessageType::Notification => {
+                let notif_action = handle_notification(&mut state, method, content);
+                match notif_action {
+                    NotificationAction::SendDiagnostics => {
+                        let s = publish_diagnostics(&state);
+                        log_dbg!(DIAGN, "Send diagnostics: {}", s);
+                        if s.len() > 0 {
+                            send_message(s);
                         }
                     }
-                }
-            }
-            Err(e) => {
-                log_err!("Read error {}", e);
-                error_count += 1;
-                if error_count >= 10 {
-                    log_err!("To many read errors, exiting ...");
-                    break;
+                    NotificationAction::Exit => {
+                        log_dbg!(PROTO, "Exiting");
+                        break;
+                    }
+                    NotificationAction::None => {}
                 }
             }
         }
