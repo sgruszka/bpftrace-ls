@@ -24,7 +24,7 @@ pub mod btf_mod;
 use log_mod::{DIAGN, NOTIF, PROTO, VERBOSE_DEBUG};
 
 #[derive(Debug)]
-enum MessageType {
+enum LspMessageType {
     Request,
     Response,
     Notification,
@@ -43,7 +43,7 @@ enum Direction {
 
 struct LspMessage {
     direction: Direction,
-    msg_type: MessageType,
+    msg_type: LspMessageType,
     id: u64,
     method: String,
     content: json::JsonValue,
@@ -341,7 +341,7 @@ fn encode_message(state: &State, id: u64, method: &str, content: json::JsonValue
     format!("Content-Length: {}\r\n\r\n{}\n", resp.len(), resp)
 }
 
-fn decode_message(msg: String) -> (MessageType, u64, String, json::JsonValue) {
+fn decode_message(msg: String) -> (LspMessageType, u64, String, json::JsonValue) {
     // TODO remove unwrap() and handle errors
     let content = json::parse(&msg).unwrap();
 
@@ -354,12 +354,12 @@ fn decode_message(msg: String) -> (MessageType, u64, String, json::JsonValue) {
         id = num;
     }
 
-    let mut msg_type = MessageType::Notification;
+    let mut msg_type = LspMessageType::Notification;
     if id != 0 {
         if !content["result"].is_null() || !content["error"].is_null() {
-            msg_type = MessageType::Response;
+            msg_type = LspMessageType::Response;
         } else {
-            msg_type = MessageType::Request;
+            msg_type = LspMessageType::Request;
         }
     }
 
@@ -452,7 +452,7 @@ fn thread_input(mpsc_tx: mpsc::Sender<LspMessage>) {
                 let (msg_type, id, method, content) = decode_message(msg);
 
                 let exit: bool = match &msg_type {
-                    MessageType::Notification => {
+                    LspMessageType::Notification => {
                         if method == "exit" {
                             true
                         } else {
@@ -540,7 +540,7 @@ fn main() {
         let id = m.id;
 
         match m.msg_type {
-            MessageType::Request => {
+            LspMessageType::Request => {
                 let s = encode_message(&state, id, &method, content);
                 let time_diff = start_time.elapsed();
                 log_dbg!(PROTO, "Response time {:?}", time_diff);
@@ -552,8 +552,8 @@ fn main() {
                 // }
                 //
             }
-            MessageType::Response => (),
-            MessageType::Notification => {
+            LspMessageType::Response => (),
+            LspMessageType::Notification => {
                 let notif_action = handle_notification(&mut state, method, content);
                 match notif_action {
                     NotificationAction::SendDiagnostics => {
@@ -582,7 +582,7 @@ mod tests {
         let msg = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"general":{"positionEncodings":["utf-16"]}}}}"#;
         let (msg_type, id, method, _content) = decode_message(msg.to_string());
         match msg_type {
-            MessageType::Request => assert!(true),
+            LspMessageType::Request => assert!(true),
             _ => assert!(false),
         }
         assert!(id == 1);
