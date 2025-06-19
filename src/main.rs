@@ -44,6 +44,15 @@ struct LspClientMessage {
     start_time: Instant,
 }
 
+struct DiagnosticsResutls {
+    results: String,
+}
+
+enum MpscMessage {
+    ClientMessage(LspClientMessage),
+    Diagnostics(DiagnosticsResutls),
+}
+
 fn handle_notification(
     state: &mut State,
     method: String,
@@ -437,7 +446,7 @@ fn send_message(s: String) {
     }
 }
 
-fn thread_input(mpsc_tx: mpsc::Sender<LspClientMessage>) {
+fn thread_input(mpsc_tx: mpsc::Sender<MpscMessage>) {
     let mut error_count = 0;
 
     loop {
@@ -465,7 +474,7 @@ fn thread_input(mpsc_tx: mpsc::Sender<LspClientMessage>) {
                     start_time,
                 };
 
-                let res = mpsc_tx.send(lsp_client_msg);
+                let res = mpsc_tx.send(MpscMessage::ClientMessage(lsp_client_msg));
                 if let Err(err) = res {
                     log_err!("MPSC send error {}", err);
                     break;
@@ -500,15 +509,22 @@ fn main() {
 
     let _completion_init = thread::spawn(completion::init_available_traces);
 
-    let (mpsc_tx, mpsc_rx) = mpsc::channel::<LspClientMessage>();
+    let (mpsc_tx, mpsc_rx) = mpsc::channel::<MpscMessage>();
     thread::spawn(move || thread_input(mpsc_tx));
 
     loop {
-        let lsp_msg: Option<LspClientMessage>;
+        let mut lsp_client_msg: Option<LspClientMessage> = None;
 
         match mpsc_rx.recv() {
             Ok(mpsc_msg) => {
-                lsp_msg = Some(mpsc_msg);
+                match mpsc_msg {
+                    MpscMessage::ClientMessage(client_msg) => {
+                        lsp_client_msg = Some(client_msg);
+                    }
+                    MpscMessage::Diagnostics(_diagnostics) => {
+                        log_dbg!(DIAGN, "Got DiagnosticsResutls");
+                    }
+                };
             }
             Err(err) => {
                 log_err!("Subthread error {}", err);
@@ -517,10 +533,10 @@ fn main() {
         }
 
         let m;
-        if lsp_msg.is_none() {
+        if lsp_client_msg.is_none() {
             continue;
         } else {
-            m = lsp_msg.unwrap();
+            m = lsp_client_msg.unwrap();
         };
 
         let method = m.method;
