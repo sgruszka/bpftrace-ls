@@ -36,17 +36,12 @@ enum NotificationAction {
     SendDiagnostics,
 }
 
-enum Direction {
-    FromClient,
-    ToClient,
-}
-
-struct LspMessage {
-    direction: Direction,
+struct LspClientMessage {
     msg_type: LspMessageType,
     id: u64,
     method: String,
     content: json::JsonValue,
+    start_time: Instant,
 }
 
 fn handle_notification(
@@ -442,13 +437,13 @@ fn send_message(s: String) {
     }
 }
 
-fn thread_input(mpsc_tx: mpsc::Sender<LspMessage>) {
+fn thread_input(mpsc_tx: mpsc::Sender<LspClientMessage>) {
     let mut error_count = 0;
 
     loop {
         match recv_message() {
             Ok(msg) => {
-                let _start_time = Instant::now();
+                let start_time = Instant::now();
                 let (msg_type, id, method, content) = decode_message(msg);
 
                 let exit: bool = match &msg_type {
@@ -462,15 +457,15 @@ fn thread_input(mpsc_tx: mpsc::Sender<LspMessage>) {
                     _ => false,
                 };
 
-                let lsp_msg = LspMessage {
-                    direction: Direction::FromClient,
+                let lsp_client_msg = LspClientMessage {
                     msg_type,
                     id,
                     method,
                     content,
+                    start_time,
                 };
 
-                let res = mpsc_tx.send(lsp_msg);
+                let res = mpsc_tx.send(lsp_client_msg);
                 if let Err(err) = res {
                     log_err!("MPSC send error {}", err);
                     break;
@@ -505,21 +500,15 @@ fn main() {
 
     let _completion_init = thread::spawn(completion::init_available_traces);
 
-    let (mpsc_tx, mpsc_rx) = mpsc::channel::<LspMessage>();
+    let (mpsc_tx, mpsc_rx) = mpsc::channel::<LspClientMessage>();
     thread::spawn(move || thread_input(mpsc_tx));
 
     loop {
-        let mut lsp_msg: Option<LspMessage> = None;
+        let lsp_msg: Option<LspClientMessage>;
 
         match mpsc_rx.recv() {
             Ok(mpsc_msg) => {
-                match mpsc_msg.direction {
-                    Direction::FromClient => {
-                        lsp_msg = Some(mpsc_msg);
-                    }
-
-                    Direction::ToClient => {}
-                };
+                lsp_msg = Some(mpsc_msg);
             }
             Err(err) => {
                 log_err!("Subthread error {}", err);
@@ -534,10 +523,10 @@ fn main() {
             m = lsp_msg.unwrap();
         };
 
-        let start_time = Instant::now();
         let method = m.method;
         let content = m.content;
         let id = m.id;
+        let start_time = m.start_time;
 
         match m.msg_type {
             LspMessageType::Request => {
