@@ -50,12 +50,18 @@ struct LspClientMessage {
 }
 
 struct DiagnosticsResutls {
-    results: String,
+    diagnostics: String,
+    doc_version: u64,
 }
 
 enum MpscMessage {
     ClientMessage(LspClientMessage),
     Diagnostics(DiagnosticsResutls),
+}
+
+enum DiagnosticCommandMessage {
+    DiagTextDocument(TextDocument),
+    Exit,
 }
 
 fn handle_notification(
@@ -511,6 +517,17 @@ fn thread_input(mpsc_tx: mpsc::Sender<MpscMessage>) {
     }
 }
 
+fn thread_diagnostics(
+    mpsc_tx: mpsc::Sender<MpscMessage>,
+    _diag_rx: mpsc::Receiver<DiagnosticCommandMessage>,
+) {
+    let diag_msg = DiagnosticsResutls {
+        diagnostics: "".to_string(),
+        doc_version: 0,
+    };
+    let _res = mpsc_tx.send(MpscMessage::Diagnostics(diag_msg));
+}
+
 fn main() {
     if let Err(e) = log_mod::create_logger("log.txt") {
         println!("Failed to create logger, error {e}");
@@ -523,7 +540,11 @@ fn main() {
     let _completion_init = thread::spawn(completion::init_available_traces);
 
     let (mpsc_tx, mpsc_rx) = mpsc::channel::<MpscMessage>();
+    let diag_mpsc_tx = mpsc_tx.clone();
     thread::spawn(move || thread_input(mpsc_tx));
+
+    let (_diag_tx, diag_rx) = mpsc::channel::<DiagnosticCommandMessage>();
+    thread::spawn(move || thread_diagnostics(diag_mpsc_tx, diag_rx));
 
     loop {
         let mut lsp_client_msg: Option<LspClientMessage> = None;
