@@ -59,7 +59,7 @@ enum MpscMessage {
     Diagnostics(DiagnosticsResutls),
 }
 
-enum DiagnosticCommandMessage {
+enum DiagnosticsCommand {
     DiagTextDocument(TextDocument),
     Exit,
 }
@@ -519,13 +519,28 @@ fn thread_input(mpsc_tx: mpsc::Sender<MpscMessage>) {
 
 fn thread_diagnostics(
     mpsc_tx: mpsc::Sender<MpscMessage>,
-    _diag_rx: mpsc::Receiver<DiagnosticCommandMessage>,
+    diag_rx: mpsc::Receiver<DiagnosticsCommand>,
 ) {
-    let diag_msg = DiagnosticsResutls {
-        diagnostics: "".to_string(),
-        doc_version: 0,
-    };
-    let _res = mpsc_tx.send(MpscMessage::Diagnostics(diag_msg));
+    loop {
+        match diag_rx.recv() {
+            Ok(diag_msg) => match diag_msg {
+                DiagnosticsCommand::DiagTextDocument(_text_doc) => {
+                    let diag_msg = DiagnosticsResutls {
+                        diagnostics: "".to_string(),
+                        doc_version: 0,
+                    };
+                    let _res = mpsc_tx.send(MpscMessage::Diagnostics(diag_msg));
+                }
+                DiagnosticsCommand::Exit => break,
+            },
+            Err(e) => {
+                log_err!("Diagnostics MPSC error {}", e);
+                break;
+            }
+        }
+        //
+        // }
+    }
 }
 
 fn handle_client_msg(state: &mut State, lsp_client_msg: LspClientMessage) -> bool {
@@ -588,7 +603,7 @@ fn main() {
     let diag_mpsc_tx = mpsc_tx.clone();
     thread::spawn(move || thread_input(mpsc_tx));
 
-    let (_diag_tx, diag_rx) = mpsc::channel::<DiagnosticCommandMessage>();
+    let (_diag_tx, diag_rx) = mpsc::channel::<DiagnosticsCommand>();
     thread::spawn(move || thread_diagnostics(diag_mpsc_tx, diag_rx));
 
     loop {
