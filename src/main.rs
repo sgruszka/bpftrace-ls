@@ -50,7 +50,7 @@ struct LspClientMessage {
 }
 
 struct DiagnosticsResutls {
-    diagnostics: String,
+    diagnostics: json::JsonValue,
     doc_version: u64,
 }
 
@@ -286,20 +286,7 @@ fn handle_multi_line_error(tokens: &Vec<&str>) -> json::JsonValue {
     diag
 }
 
-fn publish_diagnostics(state: &State) -> String {
-    let entry;
-
-    // TOOD: need support for all edited files
-    match state.into_iter().nth(0) {
-        Some(x) => entry = x,
-        None => return "".to_string(),
-    }
-
-    let (uri, text_doc) = entry;
-    let TextDocument { text, version } = &text_doc;
-    log_dbg!(DIAGN, "Check diagnostics for uri: {}", uri);
-    log_vdbg!(DIAGN, "Version: {} Text: \n{}\n", version, text);
-
+fn do_diagnotics(text: &str) -> json::JsonValue {
     let mut diagnostics = json::JsonValue::new_array();
 
     if let Ok(output) = Command::new("sudo")
@@ -326,6 +313,25 @@ fn publish_diagnostics(state: &State) -> String {
             }
         }
     }
+
+    diagnostics
+}
+
+fn publish_diagnostics(state: &State) -> String {
+    let entry;
+
+    // TOOD: need support for all edited files
+    match state.into_iter().nth(0) {
+        Some(x) => entry = x,
+        None => return "".to_string(),
+    }
+
+    let (uri, text_doc) = entry;
+    let TextDocument { text, version } = &text_doc;
+    log_dbg!(DIAGN, "Check diagnostics for uri: {}", uri);
+    log_vdbg!(DIAGN, "Version: {} Text: \n{}\n", version, text);
+
+    let diagnostics = do_diagnotics(text);
 
     let params = object! {
         "uri": uri.to_string(),
@@ -524,22 +530,28 @@ fn thread_diagnostics(
     loop {
         match diag_rx.recv() {
             Ok(diag_msg) => match diag_msg {
-                DiagnosticsCommand::DiagTextDocument(_text_doc) => {
+                DiagnosticsCommand::DiagTextDocument(text_doc) => {
+                    let text = text_doc.text;
+                    let version = text_doc.version;
+
+                    let diagnostics = do_diagnotics(&text);
+
                     let diag_msg = DiagnosticsResutls {
-                        diagnostics: "".to_string(),
-                        doc_version: 0,
+                        diagnostics,
+                        doc_version: version,
                     };
                     let _res = mpsc_tx.send(MpscMessage::Diagnostics(diag_msg));
                 }
-                DiagnosticsCommand::Exit => break,
+                DiagnosticsCommand::Exit => {
+                    log_dbg!(DIAGN, "Exit diagnostics thread");
+                    break;
+                }
             },
             Err(e) => {
                 log_err!("Diagnostics MPSC error {}", e);
                 break;
             }
         }
-        //
-        // }
     }
 }
 
