@@ -528,6 +528,51 @@ fn thread_diagnostics(
     let _res = mpsc_tx.send(MpscMessage::Diagnostics(diag_msg));
 }
 
+fn handle_client_msg(state: &mut State, lsp_client_msg: LspClientMessage) -> bool {
+    let LspClientMessage {
+        msg_type,
+        id,
+        method,
+        content,
+        start_time,
+    } = lsp_client_msg;
+
+    match msg_type {
+        LspMessageType::Request => {
+            let s = encode_message(&state, id, &method, content);
+            let time_diff = start_time.elapsed();
+            log_dbg!(PROTO, "Response time {:?}", time_diff);
+            log_vdbg!(PROTO, "Answer:\n{}", s);
+            send_message(s);
+            // TOOD response with InvalidRequest after shutdown
+            // if method == "shutdown" {
+            //     break;
+            // }
+            //
+        }
+        LspMessageType::Response => (),
+        LspMessageType::Notification => {
+            let notif_action = handle_notification(state, method, content);
+            match notif_action {
+                NotificationAction::SendDiagnostics => {
+                    let s = publish_diagnostics(&state);
+                    log_dbg!(DIAGN, "Send diagnostics: {}", s);
+                    if s.len() > 0 {
+                        send_message(s);
+                    }
+                }
+                NotificationAction::Exit => {
+                    log_dbg!(PROTO, "Exiting");
+                    return true;
+                }
+                NotificationAction::None => {}
+            }
+        }
+    }
+
+    false /* No exit */
+}
+
 fn main() {
     if let Err(e) = log_mod::create_logger("log.txt") {
         println!("Failed to create logger, error {e}");
@@ -547,13 +592,14 @@ fn main() {
     thread::spawn(move || thread_diagnostics(diag_mpsc_tx, diag_rx));
 
     loop {
-        let mut lsp_client_msg: Option<LspClientMessage> = None;
-
         match mpsc_rx.recv() {
             Ok(mpsc_msg) => {
                 match mpsc_msg {
                     MpscMessage::ClientMessage(client_msg) => {
-                        lsp_client_msg = Some(client_msg);
+                        let do_exit = handle_client_msg(&mut state, client_msg);
+                        if do_exit {
+                            break;
+                        }
                     }
                     MpscMessage::Diagnostics(_diagnostics) => {
                         log_dbg!(DIAGN, "Got DiagnosticsResutls");
@@ -563,51 +609,6 @@ fn main() {
             Err(err) => {
                 log_err!("Subthread error {}", err);
                 break;
-            }
-        }
-
-        let m;
-        if lsp_client_msg.is_none() {
-            continue;
-        } else {
-            m = lsp_client_msg.unwrap();
-        };
-
-        let method = m.method;
-        let content = m.content;
-        let id = m.id;
-        let start_time = m.start_time;
-
-        match m.msg_type {
-            LspMessageType::Request => {
-                let s = encode_message(&state, id, &method, content);
-                let time_diff = start_time.elapsed();
-                log_dbg!(PROTO, "Response time {:?}", time_diff);
-                log_vdbg!(PROTO, "Answer:\n{}", s);
-                send_message(s);
-                // TOOD response with InvalidRequest after shutdown
-                // if method == "shutdown" {
-                //     break;
-                // }
-                //
-            }
-            LspMessageType::Response => (),
-            LspMessageType::Notification => {
-                let notif_action = handle_notification(&mut state, method, content);
-                match notif_action {
-                    NotificationAction::SendDiagnostics => {
-                        let s = publish_diagnostics(&state);
-                        log_dbg!(DIAGN, "Send diagnostics: {}", s);
-                        if s.len() > 0 {
-                            send_message(s);
-                        }
-                    }
-                    NotificationAction::Exit => {
-                        log_dbg!(PROTO, "Exiting");
-                        break;
-                    }
-                    NotificationAction::None => {}
-                }
             }
         }
     }
