@@ -13,10 +13,15 @@ const PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PKG_NAME: &str = env!("CARGO_PKG_NAME");
 
 pub const JSON_RPC_VERSION: &str = "2.0";
-pub type State = HashMap<String, String>;
+
+// #[derive(Debug)]
+struct TextDocument {
+    text: String,
+    version: u64,
+}
+pub type State = HashMap<String, TextDocument>;
 
 mod completion;
-
 #[macro_use]
 pub mod log_mod;
 pub mod btf_mod;
@@ -63,8 +68,9 @@ fn handle_notification(
             let text_document = &content["params"]["textDocument"];
             let uri = text_document["uri"].to_string();
             let text = text_document["text"].to_string();
+            let version = text_document["version"].as_u64().unwrap_or_default();
 
-            state.insert(uri, text);
+            state.insert(uri, TextDocument { text, version });
 
             log_dbg!(NOTIF, "Open: textDocument: {}", text_document);
             return NotificationAction::SendDiagnostics;
@@ -72,11 +78,17 @@ fn handle_notification(
         "textDocument/didChange" => {
             let text_document = &content["params"]["textDocument"];
             let uri = text_document["uri"].to_string();
+            let version = text_document["version"].as_u64().unwrap_or_default();
 
             let changes = &content["params"]["contentChanges"];
             let text = changes[0]["text"].to_string();
 
-            state.insert(uri, text.to_string());
+            let text_doc = TextDocument {
+                text: text.to_string(),
+                version,
+            };
+
+            state.insert(uri, text_doc);
 
             log_dbg!(NOTIF, "Change: textDocument: {}", text_document);
             return NotificationAction::SendDiagnostics;
@@ -277,9 +289,10 @@ fn publish_diagnostics(state: &State) -> String {
         None => return "".to_string(),
     }
 
-    let (uri, text) = entry;
+    let (uri, text_doc) = entry;
+    let TextDocument { text, version } = &text_doc;
     log_dbg!(DIAGN, "Check diagnostics for uri: {}", uri);
-    log_vdbg!(DIAGN, "Text: \n{}\n", text);
+    log_vdbg!(DIAGN, "Version: {} Text: \n{}\n", version, text);
 
     let mut diagnostics = json::JsonValue::new_array();
 
@@ -505,7 +518,7 @@ fn main() {
 
     log_dbg!(PROTO, "{} {} started", PKG_NAME, PKG_VERSION);
 
-    let mut state: HashMap<String, String> = HashMap::new();
+    let mut state: State = HashMap::new();
 
     let _completion_init = thread::spawn(completion::init_available_traces);
 

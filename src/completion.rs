@@ -19,8 +19,8 @@ static PROBES_ARGS_MAP: Lazy<Mutex<HashMap<String, String>>> =
 static MODULE_BTF_MAP: Lazy<Mutex<HashMap<String, Btf>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 fn get_text(state: &State, uri: &str) -> String {
-    if let Some(text) = state.get(uri) {
-        return text.to_string();
+    if let Some(text_doc) = state.get(uri) {
+        return text_doc.text.to_string();
     };
 
     "".to_string()
@@ -28,8 +28,8 @@ fn get_text(state: &State, uri: &str) -> String {
 
 fn get_line(state: &State, uri: &str, line_nr: usize) -> String {
     let mut from_line = String::new();
-    if let Some(text) = state.get(uri) {
-        for (i, line) in text.lines().enumerate() {
+    if let Some(text_doc) = state.get(uri) {
+        for (i, line) in text_doc.text.lines().enumerate() {
             if i == line_nr {
                 from_line = line.to_string();
             }
@@ -630,7 +630,8 @@ pub fn encode_hover(state: &State, content: json::JsonValue) -> json::JsonValue 
 
     let mut data = object! {};
 
-    let text = if let Some(text) = state.get(uri) {
+    let text = if let Some(text_doc) = state.get(uri) {
+        let text = &text_doc.text;
         log_vdbg!(HOVER, "This is the text:\n'{}'", text);
 
         for (i, line) in text.lines().enumerate() {
