@@ -15,7 +15,7 @@ const PKG_NAME: &str = env!("CARGO_PKG_NAME");
 pub const JSON_RPC_VERSION: &str = "2.0";
 
 // #[derive(Debug)]
-struct TextDocument {
+pub struct TextDocument {
     text: String,
     version: u64,
 }
@@ -317,7 +317,33 @@ fn do_diagnotics(text: &str) -> json::JsonValue {
     diagnostics
 }
 
-fn publish_diagnostics(state: &State) -> String {
+fn send_diag_command(state: &State, diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
+    let entry;
+
+    // TOOD: need support for all edited files
+    match state.into_iter().nth(0) {
+        Some(x) => entry = x,
+        None => return,
+    }
+    let (uri, text_doc) = entry;
+
+    log_dbg!(
+        DIAGN,
+        "Send diagnostics command for uri {} version {}",
+        uri,
+        text_doc.version
+    );
+
+    // TODO: Can we code this without clone?
+    let diag_text_doc = TextDocument {
+        text: text_doc.text.clone(),
+        version: text_doc.version,
+    };
+
+    let _ = diag_tx.send(DiagnosticsCommand::DiagTextDocument(diag_text_doc));
+}
+
+fn publish_diagnostics(state: &State, diag_results: DiagnosticsResutls) -> String {
     let entry;
 
     // TOOD: need support for all edited files
@@ -328,14 +354,29 @@ fn publish_diagnostics(state: &State) -> String {
 
     let (uri, text_doc) = entry;
     let TextDocument { text, version } = &text_doc;
-    log_dbg!(DIAGN, "Check diagnostics for uri: {}", uri);
-    log_vdbg!(DIAGN, "Version: {} Text: \n{}\n", version, text);
+    log_dbg!(
+        DIAGN,
+        "Check diagnostics for uri: {} version {}",
+        uri,
+        version
+    );
 
-    let diagnostics = do_diagnotics(text);
+    let diag_version = diag_results.doc_version;
+    if *version != diag_version {
+        log_dbg!(
+            DIAGN,
+            "Text document versions do not match: {} vs {}",
+            version,
+            diag_version
+        );
+        return "".to_string();
+    }
+
+    log_vdbg!(DIAGN, "Version: {} Text: \n{}\n", version, text);
 
     let params = object! {
         "uri": uri.to_string(),
-        "diagnostics": diagnostics,
+        "diagnostics": diag_results.diagnostics,
     };
 
     let data = object! {
@@ -555,7 +596,11 @@ fn thread_diagnostics(
     }
 }
 
-fn handle_client_msg(state: &mut State, lsp_client_msg: LspClientMessage) -> bool {
+fn handle_client_msg(
+    state: &mut State,
+    lsp_client_msg: LspClientMessage,
+    diag_tx: &mpsc::Sender<DiagnosticsCommand>,
+) -> bool {
     let LspClientMessage {
         msg_type,
         id,
@@ -582,11 +627,7 @@ fn handle_client_msg(state: &mut State, lsp_client_msg: LspClientMessage) -> boo
             let notif_action = handle_notification(state, method, content);
             match notif_action {
                 NotificationAction::SendDiagnostics => {
-                    let s = publish_diagnostics(&state);
-                    log_dbg!(DIAGN, "Send diagnostics: {}", s);
-                    if s.len() > 0 {
-                        send_message(s);
-                    }
+                    send_diag_command(state, diag_tx);
                 }
                 NotificationAction::Exit => {
                     log_dbg!(PROTO, "Exiting");
@@ -615,7 +656,7 @@ fn main() {
     let diag_mpsc_tx = mpsc_tx.clone();
     thread::spawn(move || thread_input(mpsc_tx));
 
-    let (_diag_tx, diag_rx) = mpsc::channel::<DiagnosticsCommand>();
+    let (diag_tx, diag_rx) = mpsc::channel::<DiagnosticsCommand>();
     thread::spawn(move || thread_diagnostics(diag_mpsc_tx, diag_rx));
 
     loop {
@@ -623,13 +664,17 @@ fn main() {
             Ok(mpsc_msg) => {
                 match mpsc_msg {
                     MpscMessage::ClientMessage(client_msg) => {
-                        let do_exit = handle_client_msg(&mut state, client_msg);
+                        let do_exit = handle_client_msg(&mut state, client_msg, &diag_tx);
                         if do_exit {
                             break;
                         }
                     }
-                    MpscMessage::Diagnostics(_diagnostics) => {
-                        log_dbg!(DIAGN, "Got DiagnosticsResutls");
+                    MpscMessage::Diagnostics(diag_results) => {
+                        let s = publish_diagnostics(&state, diag_results);
+                        log_dbg!(DIAGN, "Send diagnostics: {}", s);
+                        if s.len() > 0 {
+                            send_message(s);
+                        }
                     }
                 };
             }
