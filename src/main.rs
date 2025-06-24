@@ -51,7 +51,7 @@ struct LspClientMessage {
 
 struct DiagnosticsResutls {
     diagnostics: json::JsonValue,
-    doc_version: u64,
+    version: u64,
 }
 
 enum MpscMessage {
@@ -343,6 +343,10 @@ fn send_diag_command(state: &State, diag_tx: &mpsc::Sender<DiagnosticsCommand>) 
     let _ = diag_tx.send(DiagnosticsCommand::DiagTextDocument(diag_text_doc));
 }
 
+fn send_diag_exit(diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
+    let _ = diag_tx.send(DiagnosticsCommand::Exit);
+}
+
 fn publish_diagnostics(state: &State, diag_results: DiagnosticsResutls) -> String {
     let entry;
 
@@ -361,7 +365,7 @@ fn publish_diagnostics(state: &State, diag_results: DiagnosticsResutls) -> Strin
         version
     );
 
-    let diag_version = diag_results.doc_version;
+    let diag_version = diag_results.version;
     if *version != diag_version {
         log_dbg!(
             DIAGN,
@@ -369,13 +373,14 @@ fn publish_diagnostics(state: &State, diag_results: DiagnosticsResutls) -> Strin
             version,
             diag_version
         );
-        return "".to_string();
+        // Send the diagnostics for older version anyway
     }
 
-    log_vdbg!(DIAGN, "Version: {} Text: \n{}\n", version, text);
+    log_vdbg!(DIAGN, "Version: {} Text: \n{}\n", diag_version, text);
 
     let params = object! {
         "uri": uri.to_string(),
+        "version": diag_version,
         "diagnostics": diag_results.diagnostics,
     };
 
@@ -579,7 +584,7 @@ fn thread_diagnostics(
 
                     let diag_msg = DiagnosticsResutls {
                         diagnostics,
-                        doc_version: version,
+                        version,
                     };
                     let _res = mpsc_tx.send(MpscMessage::Diagnostics(diag_msg));
                 }
@@ -631,6 +636,7 @@ fn handle_client_msg(
                 }
                 NotificationAction::Exit => {
                     log_dbg!(PROTO, "Exiting");
+                    send_diag_exit(diag_tx);
                     return true;
                 }
                 NotificationAction::None => {}
