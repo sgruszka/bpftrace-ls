@@ -671,8 +671,8 @@ fn main() {
                     }
                     MpscMessage::Diagnostics(diag_results) => {
                         let s = publish_diagnostics(&state, diag_results);
-                        log_dbg!(DIAGN, "Send diagnostics: {}", s);
                         if s.len() > 0 {
+                            log_dbg!(DIAGN, "Send diagnostics: {}", s);
                             send_message(s);
                         }
                     }
