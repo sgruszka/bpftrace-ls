@@ -368,7 +368,7 @@ fn publish_diagnostics(diag_results: DiagnosticsResutls) -> String {
     }
 
     let (uri, text_doc) = entry;
-    let text = text_doc.text.clone();
+    let text = &text_doc.text;
     let version = text_doc.version;
     log_dbg!(
         DIAGN,
