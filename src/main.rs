@@ -1,10 +1,11 @@
 use json::{self, object};
 // use once_cell::sync::OnceCell;
+use once_cell::sync::Lazy;
 use std::{
     collections::HashMap,
     io::{self, Read, Write},
     process::Command,
-    sync::mpsc,
+    sync::{mpsc, Arc, RwLock},
     thread,
     time::Instant,
 };
@@ -20,6 +21,21 @@ pub struct TextDocument {
     version: u64,
 }
 pub type State = HashMap<String, TextDocument>;
+pub struct DocumentsState(Lazy<RwLock<HashMap<String, Arc<TextDocument>>>>);
+
+static DOCUMENTS_STATE: DocumentsState = DocumentsState(Lazy::new(|| RwLock::new(HashMap::new())));
+
+impl DocumentsState {
+    fn get(&self, uri: &str) -> Option<Arc<TextDocument>> {
+        let read_guard = self.0.read().unwrap();
+        read_guard.get(uri).cloned()
+    }
+
+    fn set(&self, uri: String, text_doc: Arc<TextDocument>) {
+        let mut write_guard = self.0.write().unwrap();
+        write_guard.insert(uri, text_doc);
+    }
+}
 
 mod completion;
 #[macro_use]
