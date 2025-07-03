@@ -9,7 +9,9 @@ use crate::btf_mod::{
     btf_iterate_over_names_chain, btf_resolve_func, btf_setup_module, ResolvedBtfItem,
 };
 use crate::log_mod::{self, COMPL, HOVER, VERBOSE_DEBUG};
+// use crate::DocumentsState;
 use crate::State;
+use crate::DOCUMENTS_STATE;
 use crate::{log_dbg, log_vdbg};
 use btf_rs::Btf;
 
@@ -18,17 +20,17 @@ static PROBES_ARGS_MAP: Lazy<Mutex<HashMap<String, String>>> =
 
 static MODULE_BTF_MAP: Lazy<Mutex<HashMap<String, Btf>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
-fn get_text(state: &State, uri: &str) -> String {
-    if let Some(text_doc) = state.get(uri) {
+fn get_text(_state: &State, uri: &str) -> String {
+    if let Some(text_doc) = DOCUMENTS_STATE.get(uri) {
         return text_doc.text.to_string();
     };
 
     "".to_string()
 }
 
-fn get_line(state: &State, uri: &str, line_nr: usize) -> String {
+fn get_line(_state: &State, uri: &str, line_nr: usize) -> String {
     let mut from_line = String::new();
-    if let Some(text_doc) = state.get(uri) {
+    if let Some(text_doc) = DOCUMENTS_STATE.get(uri) {
         for (i, line) in text_doc.text.lines().enumerate() {
             if i == line_nr {
                 from_line = line.to_string();

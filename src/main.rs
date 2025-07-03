@@ -23,7 +23,8 @@ pub struct TextDocument {
 pub type State = HashMap<String, TextDocument>;
 pub struct DocumentsState(Lazy<RwLock<HashMap<String, Arc<TextDocument>>>>);
 
-static DOCUMENTS_STATE: DocumentsState = DocumentsState(Lazy::new(|| RwLock::new(HashMap::new())));
+pub static DOCUMENTS_STATE: DocumentsState =
+    DocumentsState(Lazy::new(|| RwLock::new(HashMap::new())));
 
 impl DocumentsState {
     fn get(&self, uri: &str) -> Option<Arc<TextDocument>> {
@@ -81,7 +82,7 @@ enum DiagnosticsCommand {
 }
 
 fn handle_notification(
-    state: &mut State,
+    _state: &mut State,
     method: String,
     content: json::JsonValue,
 ) -> NotificationAction {
@@ -92,7 +93,8 @@ fn handle_notification(
             let text = text_document["text"].to_string();
             let version = text_document["version"].as_u64().unwrap_or_default();
 
-            state.insert(uri, TextDocument { text, version });
+            let text_doc = Arc::new(TextDocument { text, version });
+            DOCUMENTS_STATE.set(uri, text_doc);
 
             log_dbg!(NOTIF, "Open: textDocument: {}", text_document);
             return NotificationAction::SendDiagnostics;
@@ -105,12 +107,8 @@ fn handle_notification(
             let changes = &content["params"]["contentChanges"];
             let text = changes[0]["text"].to_string();
 
-            let text_doc = TextDocument {
-                text: text.to_string(),
-                version,
-            };
-
-            state.insert(uri, text_doc);
+            let text_doc = Arc::new(TextDocument { text, version });
+            DOCUMENTS_STATE.set(uri, text_doc);
 
             log_dbg!(NOTIF, "Change: textDocument: {}", text_document);
             return NotificationAction::SendDiagnostics;
@@ -333,11 +331,12 @@ fn do_diagnotics(text: &str) -> json::JsonValue {
     diagnostics
 }
 
-fn send_diag_command(state: &State, diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
+fn send_diag_command(_state: &State, diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
     let entry;
 
     // TOOD: need support for all edited files
-    match state.into_iter().nth(0) {
+    let docs_state = DOCUMENTS_STATE.0.read().unwrap();
+    match docs_state.iter().nth(0) {
         Some(x) => entry = x,
         None => return,
     }
@@ -363,17 +362,19 @@ fn send_diag_exit(diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
     let _ = diag_tx.send(DiagnosticsCommand::Exit);
 }
 
-fn publish_diagnostics(state: &State, diag_results: DiagnosticsResutls) -> String {
+fn publish_diagnostics(_state: &State, diag_results: DiagnosticsResutls) -> String {
     let entry;
 
+    let docs_state = DOCUMENTS_STATE.0.read().unwrap();
     // TOOD: need support for all edited files
-    match state.into_iter().nth(0) {
+    match docs_state.iter().nth(0) {
         Some(x) => entry = x,
         None => return "".to_string(),
     }
 
     let (uri, text_doc) = entry;
-    let TextDocument { text, version } = &text_doc;
+    let text = text_doc.text.clone();
+    let version = text_doc.version;
     log_dbg!(
         DIAGN,
         "Check diagnostics for uri: {} version {}",
@@ -382,7 +383,7 @@ fn publish_diagnostics(state: &State, diag_results: DiagnosticsResutls) -> Strin
     );
 
     let diag_version = diag_results.version;
-    if *version != diag_version {
+    if version != diag_version {
         log_dbg!(
             DIAGN,
             "Text document versions do not match: {} vs {}",
