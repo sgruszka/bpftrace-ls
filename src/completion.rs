@@ -10,7 +10,6 @@ use crate::btf_mod::{
 };
 use crate::log_mod::{self, COMPL, HOVER, VERBOSE_DEBUG};
 // use crate::DocumentsState;
-use crate::State;
 use crate::DOCUMENTS_STATE;
 use crate::{log_dbg, log_vdbg};
 use btf_rs::Btf;
@@ -20,7 +19,7 @@ static PROBES_ARGS_MAP: Lazy<Mutex<HashMap<String, String>>> =
 
 static MODULE_BTF_MAP: Lazy<Mutex<HashMap<String, Btf>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
-fn get_text(_state: &State, uri: &str) -> String {
+fn get_text(uri: &str) -> String {
     if let Some(text_doc) = DOCUMENTS_STATE.get(uri) {
         return text_doc.text.to_string();
     };
@@ -28,7 +27,7 @@ fn get_text(_state: &State, uri: &str) -> String {
     "".to_string()
 }
 
-fn get_line(_state: &State, uri: &str, line_nr: usize) -> String {
+fn get_line(uri: &str, line_nr: usize) -> String {
     let mut from_line = String::new();
     if let Some(text_doc) = DOCUMENTS_STATE.get(uri) {
         for (i, line) in text_doc.text.lines().enumerate() {
@@ -535,15 +534,15 @@ fn encode_completion_for_empty_line(prefixes: &[&str]) -> json::JsonValue {
     data
 }
 
-pub fn encode_completion(state: &State, content: json::JsonValue) -> json::JsonValue {
+pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     let uri = &content["params"]["textDocument"]["uri"].to_string();
 
     let position = &content["params"]["position"];
     let line_nr = position["line"].as_usize().unwrap();
     let char_nr = position["character"].as_usize().unwrap();
 
-    let text = get_text(state, &uri);
-    let line_str = get_line(state, &uri, line_nr);
+    let text = get_text(&uri);
+    let line_str = get_line(&uri, line_nr);
 
     log_dbg!(COMPL, "Complete for line: '{}'", line_str);
 
@@ -572,7 +571,7 @@ pub fn encode_completion(state: &State, content: json::JsonValue) -> json::JsonV
     data
 }
 
-pub fn encode_completion_resolve(_state: &State, content: json::JsonValue) -> json::JsonValue {
+pub fn encode_completion_resolve(content: json::JsonValue) -> json::JsonValue {
     // TODO
     log_dbg!(COMPL, "Completion resolve for: {}", content);
 
@@ -620,7 +619,7 @@ where
     found.to_string()
 }
 
-pub fn encode_hover(state: &State, content: json::JsonValue) -> json::JsonValue {
+pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
     log_dbg!(HOVER, "Received hover with data {}", content);
 
     let position = &content["params"]["position"];
@@ -632,8 +631,9 @@ pub fn encode_hover(state: &State, content: json::JsonValue) -> json::JsonValue 
 
     let mut data = object! {};
 
-    let text = if let Some(text_doc) = state.get(uri) {
-        let text = &text_doc.text;
+    let text = if let Some(text_doc) = DOCUMENTS_STATE.get(uri) {
+        // TODO: remove this clone
+        let text = text_doc.text.clone();
         log_vdbg!(HOVER, "This is the text:\n'{}'", text);
 
         for (i, line) in text.lines().enumerate() {
@@ -665,8 +665,8 @@ pub fn encode_hover(state: &State, content: json::JsonValue) -> json::JsonValue 
                   },
             };
         }
-    } else if is_action_block(text, line_nr, char_nr) {
-        let probe = find_probe_for_action(text, line_nr);
+    } else if is_action_block(&text, line_nr, char_nr) {
+        let probe = find_probe_for_action(&text, line_nr);
         let probe_args = find_probe_args_by_command(&probe);
         log_dbg!(HOVER, "Probe {} with args:\n{}", probe, probe_args);
 

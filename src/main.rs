@@ -415,11 +415,11 @@ fn encode_message(state: &State, id: u64, method: &str, content: json::JsonValue
     let mut data = match &method[..] {
         "initialize" => encode_initalize_result(),
         "shutdown" => encode_shutdown(),
-        "textDocument/hover" => completion::encode_hover(state, content),
+        "textDocument/hover" => completion::encode_hover(content),
         "textDocument/definition" => encode_definition(state, content),
         "textDocument/codeAction" => encode_code_action(state, content),
-        "textDocument/completion" => completion::encode_completion(state, content),
-        "completionItem/resolve" => completion::encode_completion_resolve(state, content),
+        "textDocument/completion" => completion::encode_completion(content),
+        "completionItem/resolve" => completion::encode_completion_resolve(content),
         unhandled_method => {
             log_dbg!(PROTO, "No handler for method: {}", unhandled_method);
             object! {}
