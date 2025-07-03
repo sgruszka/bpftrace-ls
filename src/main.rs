@@ -20,7 +20,6 @@ pub struct TextDocument {
     text: String,
     version: u64,
 }
-pub type State = HashMap<String, TextDocument>;
 pub struct DocumentsState(Lazy<RwLock<HashMap<String, Arc<TextDocument>>>>);
 
 pub static DOCUMENTS_STATE: DocumentsState =
@@ -81,11 +80,7 @@ enum DiagnosticsCommand {
     Exit,
 }
 
-fn handle_notification(
-    _state: &mut State,
-    method: String,
-    content: json::JsonValue,
-) -> NotificationAction {
+fn handle_notification(method: String, content: json::JsonValue) -> NotificationAction {
     match &method[..] {
         "textDocument/didOpen" => {
             let text_document = &content["params"]["textDocument"];
@@ -166,7 +161,7 @@ fn encode_shutdown() -> json::JsonValue {
     data
 }
 
-fn encode_definition(_state: &State, content: json::JsonValue) -> json::JsonValue {
+fn encode_definition(content: json::JsonValue) -> json::JsonValue {
     log_err!("Received definition with data {}", content);
     let uri = &content["params"]["textDocument"]["uri"].to_string();
 
@@ -190,7 +185,7 @@ fn encode_definition(_state: &State, content: json::JsonValue) -> json::JsonValu
 }
 
 // TODO implement correct codeAction and enable codeActionProvider
-fn encode_code_action(_state: &State, content: json::JsonValue) -> json::JsonValue {
+fn encode_code_action(content: json::JsonValue) -> json::JsonValue {
     log_err!("Received codeAction with data {}", content);
     let uri = &content["params"]["textDocument"]["uri"].to_string();
 
@@ -331,7 +326,7 @@ fn do_diagnotics(text: &str) -> json::JsonValue {
     diagnostics
 }
 
-fn send_diag_command(_state: &State, diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
+fn send_diag_command(diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
     let entry;
 
     // TOOD: need support for all edited files
@@ -362,7 +357,7 @@ fn send_diag_exit(diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
     let _ = diag_tx.send(DiagnosticsCommand::Exit);
 }
 
-fn publish_diagnostics(_state: &State, diag_results: DiagnosticsResutls) -> String {
+fn publish_diagnostics(diag_results: DiagnosticsResutls) -> String {
     let entry;
 
     let docs_state = DOCUMENTS_STATE.0.read().unwrap();
@@ -411,13 +406,13 @@ fn publish_diagnostics(_state: &State, diag_results: DiagnosticsResutls) -> Stri
     format!("Content-Length: {}\r\n\r\n{}\r\n", resp.len(), resp)
 }
 
-fn encode_message(state: &State, id: u64, method: &str, content: json::JsonValue) -> String {
+fn encode_message(id: u64, method: &str, content: json::JsonValue) -> String {
     let mut data = match &method[..] {
         "initialize" => encode_initalize_result(),
         "shutdown" => encode_shutdown(),
         "textDocument/hover" => completion::encode_hover(content),
-        "textDocument/definition" => encode_definition(state, content),
-        "textDocument/codeAction" => encode_code_action(state, content),
+        "textDocument/definition" => encode_definition(content),
+        "textDocument/codeAction" => encode_code_action(content),
         "textDocument/completion" => completion::encode_completion(content),
         "completionItem/resolve" => completion::encode_completion_resolve(content),
         unhandled_method => {
@@ -619,7 +614,6 @@ fn thread_diagnostics(
 }
 
 fn handle_client_msg(
-    state: &mut State,
     lsp_client_msg: LspClientMessage,
     diag_tx: &mpsc::Sender<DiagnosticsCommand>,
 ) -> bool {
@@ -633,7 +627,7 @@ fn handle_client_msg(
 
     match msg_type {
         LspMessageType::Request => {
-            let s = encode_message(&state, id, &method, content);
+            let s = encode_message(id, &method, content);
             let time_diff = start_time.elapsed();
             log_dbg!(PROTO, "Response time {:?}", time_diff);
             log_vdbg!(PROTO, "Answer:\n{}", s);
@@ -646,10 +640,10 @@ fn handle_client_msg(
         }
         LspMessageType::Response => (),
         LspMessageType::Notification => {
-            let notif_action = handle_notification(state, method, content);
+            let notif_action = handle_notification(method, content);
             match notif_action {
                 NotificationAction::SendDiagnostics => {
-                    send_diag_command(state, diag_tx);
+                    send_diag_command(diag_tx);
                 }
                 NotificationAction::Exit => {
                     log_dbg!(PROTO, "Exiting");
@@ -671,8 +665,6 @@ fn main() {
 
     log_dbg!(PROTO, "{} {} started", PKG_NAME, PKG_VERSION);
 
-    let mut state: State = HashMap::new();
-
     let _completion_init = thread::spawn(completion::init_available_traces);
 
     let (mpsc_tx, mpsc_rx) = mpsc::channel::<MpscMessage>();
@@ -687,13 +679,13 @@ fn main() {
             Ok(mpsc_msg) => {
                 match mpsc_msg {
                     MpscMessage::ClientMessage(client_msg) => {
-                        let do_exit = handle_client_msg(&mut state, client_msg, &diag_tx);
+                        let do_exit = handle_client_msg(client_msg, &diag_tx);
                         if do_exit {
                             break;
                         }
                     }
                     MpscMessage::Diagnostics(diag_results) => {
-                        let s = publish_diagnostics(&state, diag_results);
+                        let s = publish_diagnostics(diag_results);
                         if s.len() > 0 {
                             log_dbg!(DIAGN, "Send diagnostics: {}", s);
                             send_message(s);
