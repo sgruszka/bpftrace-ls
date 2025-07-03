@@ -627,29 +627,29 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
     let char_nr = position["character"].as_usize().unwrap();
 
     let uri = &content["params"]["textDocument"]["uri"].to_string();
-    let mut from_line = String::new();
 
     let mut data = object! {};
 
-    let text = if let Some(text_doc) = DOCUMENTS_STATE.get(uri) {
-        // TODO: remove this clone
-        let text = text_doc.text.clone();
-        log_vdbg!(HOVER, "This is the text:\n'{}'", text);
-
-        for (i, line) in text.lines().enumerate() {
-            if i == line_nr {
-                from_line = line.to_string();
-            }
-        }
-        text
-    } else {
+    let option = DOCUMENTS_STATE.get(uri);
+    if option.is_none() {
         return data;
-    };
+    }
 
+    let text_doc = option.unwrap();
+    let text = &text_doc.text;
+
+    log_vdbg!(HOVER, "This is the text:\n'{}'", text);
+
+    let mut from_line: &str = text;
+    for (i, line) in text.lines().enumerate() {
+        if i == line_nr {
+            from_line = line
+        }
+    }
     log_dbg!(HOVER, "Hover for line {}", from_line);
 
     let found = find_hover_str(
-        &from_line,
+        from_line,
         char_nr,
         |c| c.is_whitespace(),
         |c| c.is_whitespace(),
@@ -673,7 +673,7 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         let lterm = |c: char| -> bool { c.is_whitespace() || c == '{' || c == '(' };
         let rterm =
             |c: char| -> bool { c.is_whitespace() || c == '}' || c == ')' || c == '.' || c == '-' };
-        let mut found = find_hover_str(&from_line, char_nr, lterm, rterm);
+        let mut found = find_hover_str(from_line, char_nr, lterm, rterm);
         log_dbg!(HOVER, "Hover found args string {}", found);
 
         if found == "args" {
