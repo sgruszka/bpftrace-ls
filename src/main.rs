@@ -54,7 +54,7 @@ enum LspMessageType {
 enum NotificationAction {
     None,
     Exit,
-    SendDiagnostics,
+    SendDiagnostics(String),
 }
 
 struct LspClientMessage {
@@ -89,10 +89,10 @@ fn handle_notification(method: String, content: json::JsonValue) -> Notification
             let version = text_document["version"].as_u64().unwrap_or_default();
 
             let text_doc = Arc::new(TextDocument { text, version });
-            DOCUMENTS_STATE.set(uri, text_doc);
+            DOCUMENTS_STATE.set(uri.clone(), text_doc);
 
             log_dbg!(NOTIF, "Open: textDocument: {}", text_document);
-            return NotificationAction::SendDiagnostics;
+            return NotificationAction::SendDiagnostics(uri);
         }
         "textDocument/didChange" => {
             let text_document = &content["params"]["textDocument"];
@@ -103,13 +103,15 @@ fn handle_notification(method: String, content: json::JsonValue) -> Notification
             let text = changes[0]["text"].to_string();
 
             let text_doc = Arc::new(TextDocument { text, version });
-            DOCUMENTS_STATE.set(uri, text_doc);
+            DOCUMENTS_STATE.set(uri.clone(), text_doc);
 
             log_dbg!(NOTIF, "Change: textDocument: {}", text_document);
-            return NotificationAction::SendDiagnostics;
+            return NotificationAction::SendDiagnostics(uri);
         }
         "textDocument/didSave" => {
-            return NotificationAction::SendDiagnostics;
+            let text_document = &content["params"]["textDocument"];
+            let uri = text_document["uri"].to_string();
+            return NotificationAction::SendDiagnostics(uri);
         }
         "exit" => {
             return NotificationAction::Exit;
@@ -326,16 +328,14 @@ fn do_diagnotics(text: &str) -> json::JsonValue {
     diagnostics
 }
 
-fn send_diag_command(diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
-    let entry;
+fn send_diag_command(uri: String, diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
+    let option = DOCUMENTS_STATE.get(&uri);
 
-    // TOOD: need support for all edited files
-    let docs_state = DOCUMENTS_STATE.0.read().unwrap();
-    match docs_state.iter().nth(0) {
-        Some(x) => entry = x,
-        None => return,
+    if option.is_none() {
+        log_dbg!(DIAGN, "No text document for {}", uri);
+        return;
     }
-    let (uri, text_doc) = entry;
+    let text_doc = option.unwrap();
 
     log_dbg!(
         DIAGN,
@@ -641,9 +641,10 @@ fn handle_client_msg(
         LspMessageType::Response => (),
         LspMessageType::Notification => {
             let notif_action = handle_notification(method, content);
+            // TODO move this to handle notification
             match notif_action {
-                NotificationAction::SendDiagnostics => {
-                    send_diag_command(diag_tx);
+                NotificationAction::SendDiagnostics(uri) => {
+                    send_diag_command(uri, diag_tx);
                 }
                 NotificationAction::Exit => {
                     log_dbg!(PROTO, "Exiting");
