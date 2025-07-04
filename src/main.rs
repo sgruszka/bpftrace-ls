@@ -66,7 +66,13 @@ struct LspClientMessage {
 }
 
 struct DiagnosticsResutls {
+    uri: String,
+    version: u64,
     diagnostics: json::JsonValue,
+}
+
+struct DiagnosticsRequest {
+    uri: String,
     version: u64,
 }
 
@@ -76,7 +82,7 @@ enum MpscMessage {
 }
 
 enum DiagnosticsCommand {
-    DiagTextDocument(TextDocument),
+    DiagRequest(DiagnosticsRequest),
     Exit,
 }
 
@@ -330,27 +336,23 @@ fn do_diagnotics(text: &str) -> json::JsonValue {
 
 fn send_diag_command(uri: String, diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
     let option = DOCUMENTS_STATE.get(&uri);
-
     if option.is_none() {
         log_dbg!(DIAGN, "No text document for {}", uri);
         return;
     }
     let text_doc = option.unwrap();
+    let version = text_doc.version;
 
     log_dbg!(
         DIAGN,
         "Send diagnostics command for uri {} version {}",
         uri,
-        text_doc.version
+        version,
     );
 
-    // TODO: Can we code this without clone?
-    let diag_text_doc = TextDocument {
-        text: text_doc.text.clone(),
-        version: text_doc.version,
-    };
+    let diag_req = DiagnosticsRequest { uri, version };
 
-    let _ = diag_tx.send(DiagnosticsCommand::DiagTextDocument(diag_text_doc));
+    let _ = diag_tx.send(DiagnosticsCommand::DiagRequest(diag_req));
 }
 
 fn send_diag_exit(diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
@@ -358,41 +360,36 @@ fn send_diag_exit(diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
 }
 
 fn publish_diagnostics(diag_results: DiagnosticsResutls) -> String {
-    let entry;
-
-    let docs_state = DOCUMENTS_STATE.0.read().unwrap();
-    // TOOD: need support for all edited files
-    match docs_state.iter().nth(0) {
-        Some(x) => entry = x,
-        None => return "".to_string(),
-    }
-
-    let (uri, text_doc) = entry;
-    let text = &text_doc.text;
-    let version = text_doc.version;
+    let uri = &diag_results.uri;
     log_dbg!(
         DIAGN,
-        "Check diagnostics for uri: {} version {}",
+        "Got diagnostics results for uri: {} version {}",
         uri,
-        version
+        diag_results.version
     );
 
-    let diag_version = diag_results.version;
-    if version != diag_version {
+    let option = DOCUMENTS_STATE.get(uri);
+    if option.is_none() {
+        log_err!("No text document for {}", uri);
+        return "".to_string();
+    }
+    let text_doc = option.unwrap();
+
+    if text_doc.version != diag_results.version {
         log_dbg!(
             DIAGN,
             "Text document versions do not match: {} vs {}",
-            version,
-            diag_version
+            text_doc.version,
+            diag_results.version
         );
-        // Send the diagnostics for older version anyway
+        return "".to_string();
     }
 
-    log_vdbg!(DIAGN, "Version: {} Text: \n{}\n", diag_version, text);
+    log_vdbg!(DIAGN, "Text: \n{}\n", &text_doc.text);
 
     let params = object! {
         "uri": uri.to_string(),
-        "version": diag_version,
+        "version": text_doc.version,
         "diagnostics": diag_results.diagnostics,
     };
 
@@ -588,15 +585,23 @@ fn thread_diagnostics(
     loop {
         match diag_rx.recv() {
             Ok(diag_msg) => match diag_msg {
-                DiagnosticsCommand::DiagTextDocument(text_doc) => {
-                    let text = text_doc.text;
-                    let version = text_doc.version;
+                DiagnosticsCommand::DiagRequest(diag_req) => {
+                    let uri = diag_req.uri;
+                    let version = diag_req.version;
 
-                    let diagnostics = do_diagnotics(&text);
+                    let option = DOCUMENTS_STATE.get(&uri);
+                    if option.is_none() {
+                        log_err!("Can not find document for {uri}");
+                        continue;
+                    }
+
+                    let text_doc = option.unwrap();
+                    let diagnostics = do_diagnotics(&text_doc.text);
 
                     let diag_msg = DiagnosticsResutls {
-                        diagnostics,
+                        uri,
                         version,
+                        diagnostics,
                     };
                     let _res = mpsc_tx.send(MpscMessage::Diagnostics(diag_msg));
                 }
@@ -641,7 +646,7 @@ fn handle_client_msg(
         LspMessageType::Response => (),
         LspMessageType::Notification => {
             let notif_action = handle_notification(method, content);
-            // TODO move this to handle notification
+            // TODO consider moving this to handle notification
             match notif_action {
                 NotificationAction::SendDiagnostics(uri) => {
                     send_diag_command(uri, diag_tx);
