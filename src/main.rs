@@ -359,7 +359,7 @@ fn send_diag_exit(diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
     let _ = diag_tx.send(DiagnosticsCommand::Exit);
 }
 
-fn publish_diagnostics(diag_results: DiagnosticsResutls) -> String {
+fn publish_diagnostics(diag_results: DiagnosticsResutls) -> Option<String> {
     let uri = &diag_results.uri;
     log_dbg!(
         DIAGN,
@@ -368,12 +368,7 @@ fn publish_diagnostics(diag_results: DiagnosticsResutls) -> String {
         diag_results.version
     );
 
-    let option = DOCUMENTS_STATE.get(uri);
-    if option.is_none() {
-        log_err!("No text document for {}", uri);
-        return "".to_string();
-    }
-    let text_doc = option.unwrap();
+    let text_doc = DOCUMENTS_STATE.get(uri)?;
 
     if text_doc.version != diag_results.version {
         log_dbg!(
@@ -382,7 +377,7 @@ fn publish_diagnostics(diag_results: DiagnosticsResutls) -> String {
             text_doc.version,
             diag_results.version
         );
-        return "".to_string();
+        return None;
     }
 
     log_vdbg!(DIAGN, "Text: \n{}\n", &text_doc.text);
@@ -400,7 +395,11 @@ fn publish_diagnostics(diag_results: DiagnosticsResutls) -> String {
     };
 
     let resp = data.dump();
-    format!("Content-Length: {}\r\n\r\n{}\r\n", resp.len(), resp)
+    Some(format!(
+        "Content-Length: {}\r\n\r\n{}\r\n",
+        resp.len(),
+        resp
+    ))
 }
 
 fn encode_message(id: u64, method: &str, content: json::JsonValue) -> String {
@@ -691,8 +690,7 @@ fn main() {
                         }
                     }
                     MpscMessage::Diagnostics(diag_results) => {
-                        let s = publish_diagnostics(diag_results);
-                        if s.len() > 0 {
+                        if let Some(s) = publish_diagnostics(diag_results) {
                             log_dbg!(DIAGN, "Send diagnostics: {}", s);
                             send_message(s);
                         }
