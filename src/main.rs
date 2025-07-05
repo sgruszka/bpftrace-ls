@@ -7,7 +7,7 @@ use std::{
     process::Command,
     sync::{mpsc, Arc, RwLock},
     thread,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 const PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -588,13 +588,27 @@ fn thread_diagnostics(
                     let uri = diag_req.uri;
                     let version = diag_req.version;
 
+                    // Skip diagnostics if file is edited
+                    // TODO: check if 300ms is more or less good heuristics
+                    thread::sleep(Duration::from_millis(300));
+
                     let option = DOCUMENTS_STATE.get(&uri);
                     if option.is_none() {
                         log_err!("Can not find document for {uri}");
                         continue;
                     }
-
                     let text_doc = option.unwrap();
+
+                    if text_doc.version != diag_req.version {
+                        log_dbg!(
+                            DIAGN,
+                            "Skip diagnostics for old version {}, now version is {}",
+                            diag_req.version,
+                            text_doc.version
+                        );
+                        continue;
+                    }
+
                     let diagnostics = do_diagnotics(&text_doc.text);
 
                     let diag_msg = DiagnosticsResutls {
