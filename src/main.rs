@@ -335,12 +335,10 @@ fn do_diagnotics(text: &str) -> json::JsonValue {
 }
 
 fn send_diag_command(uri: String, diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
-    let option = DOCUMENTS_STATE.get(&uri);
-    if option.is_none() {
+    let Some(text_doc) = DOCUMENTS_STATE.get(&uri) else {
         log_dbg!(DIAGN, "No text document for {}", uri);
         return;
-    }
-    let text_doc = option.unwrap();
+		};
     let version = text_doc.version;
 
     log_dbg!(
