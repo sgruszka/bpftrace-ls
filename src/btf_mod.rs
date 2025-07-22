@@ -34,6 +34,12 @@ fn get_struct_type_vec(btf: &Btf, st: &btf::Struct, type_vec: &mut Vec<String>) 
     type_vec.push(st_name.clone());
 }
 
+fn get_union_type_vec(btf: &Btf, u: &btf::Union, type_vec: &mut Vec<String>) {
+    type_vec.push("union".to_string());
+    let u_name = btf.resolve_name(u).unwrap_or_default();
+    type_vec.push(u_name.clone());
+}
+
 fn resolve_struct_member(btf: &Btf, member: &btf::Member, id: u32) -> ResolvedBtfItem {
     let member_name = btf.resolve_name(member).unwrap_or_default();
 
@@ -47,6 +53,7 @@ fn resolve_struct_member(btf: &Btf, member: &btf::Member, id: u32) -> ResolvedBt
     match btf.resolve_type_by_id(id).unwrap() {
         Type::Ptr(ptr) => resolve_pointer(btf, &ptr, &mut item),
         Type::Struct(st) => get_struct_type_vec(btf, &st, &mut item.type_vec),
+        Type::Union(u) => get_union_type_vec(btf, &u, &mut item.type_vec),
         Type::Int(i) => get_int_type_vec(btf, &i, &mut item.type_vec),
         Type::Typedef(t) => get_typedef_type_vec(btf, &t, &mut item.type_vec),
         Type::Array(a) => get_array_type_vec(btf, &a, &mut item.type_vec),
@@ -104,6 +111,54 @@ fn resolve_struct(btf: &Btf, base_id: u32) -> Option<ResolvedBtfItem> {
     })
 }
 
+fn resolve_union(btf: &Btf, base_id: u32) -> Option<ResolvedBtfItem> {
+    let mut id = base_id;
+    let mut type_vec: Vec<String> = Vec::new();
+
+    let u = loop {
+        if id == 0 {
+            return None;
+        }
+        match btf.resolve_type_by_id(id).unwrap() {
+            Type::Const(c) => {
+                type_vec.push("const".to_string());
+                id = c.get_type_id().unwrap_or_default();
+                continue;
+            }
+            Type::Ptr(ptr) => {
+                type_vec.push("*".to_string());
+                id = ptr.get_type_id().unwrap_or_default();
+                continue;
+            }
+            Type::Union(u) => {
+                type_vec.push("union".to_string());
+                break u;
+            }
+            x => {
+                log_dbg!(BTFRE, "Unhandled type {:?}", x);
+                return None;
+            }
+        }
+    };
+
+    let mut children: Vec<ResolvedBtfItem> = Vec::new();
+
+    for member in u.members.iter() {
+        let id = member.get_type_id().unwrap_or_default();
+        if id != 0 {
+            let child = resolve_struct_member(btf, member, id);
+            children.push(child);
+        }
+    }
+
+    Some(ResolvedBtfItem {
+        name: btf.resolve_name(&u).unwrap_or_default(),
+        type_vec,
+        type_id: id,
+        children_vec: children,
+    })
+}
+
 fn resolve_pointer(btf: &Btf, ptr: &btf::Ptr, item: &mut ResolvedBtfItem) {
     match btf.resolve_chained_type(ptr).unwrap() {
         Type::Const(c) => {
@@ -118,9 +173,9 @@ fn resolve_pointer(btf: &Btf, ptr: &btf::Ptr, item: &mut ResolvedBtfItem) {
                     item.type_id = c.get_type_id().unwrap_or_default();
                     get_typedef_type_vec(btf, &t, &mut item.type_vec);
                 }
-                Type::Union(_u) => {
+                Type::Union(u) => {
                     item.type_id = c.get_type_id().unwrap_or_default();
-                    item.type_vec.push("union".to_string()); // TODO
+                    get_union_type_vec(btf, &u, &mut item.type_vec);
                 }
                 x => log_dbg!(BTFRE, "{} {}: Unhandled type {:?}", file!(), line!(), x),
             };
@@ -137,9 +192,9 @@ fn resolve_pointer(btf: &Btf, ptr: &btf::Ptr, item: &mut ResolvedBtfItem) {
             item.type_id = ptr.get_type_id().unwrap_or_default();
             get_typedef_type_vec(btf, &t, &mut item.type_vec);
         }
-        Type::Union(_u) => {
+        Type::Union(u) => {
             item.type_id = ptr.get_type_id().unwrap_or_default();
-            item.type_vec.push("union".to_string()); // TODO
+            get_union_type_vec(btf, &u, &mut item.type_vec);
         }
         x => log_dbg!(BTFRE, "{} {}: Unhandled type {:?}", file!(), line!(), x),
     };
@@ -237,6 +292,7 @@ fn resolve_parameter(btf: &Btf, param: &btf::Parameter) -> ResolvedBtfItem {
         Type::Ptr(ptr) => resolve_pointer(btf, &ptr, &mut parameter_item),
         Type::Int(i) => get_int_type_vec(btf, &i, &mut parameter_item.type_vec),
         Type::Typedef(t) => get_typedef_type_vec(btf, &t, &mut parameter_item.type_vec),
+        Type::Union(u) => get_union_type_vec(btf, &u, &mut parameter_item.type_vec),
         x => {
             log_dbg!(BTFRE, "Unhandled type {:?}", x);
             return parameter_item;
@@ -353,12 +409,10 @@ pub fn btf_iterate_over_names_chain(
 
         if names_iter.peek().is_none() {
             let resolved_param = resolve_parameter(btf, &first_param);
-            // log_dbg!(BTFRE, "RESOLVED PARAM {:?}", resolved_param);
-            // TODO Union
             if let Some(mut r) = resolve_struct(btf, resolved_param.type_id) {
-                // TODO pass full resolved_param to struct to keep type
-                // log_dbg!(BTFRE, "RESOLVED R {:?}", r);
-                // assert!(r.name == resolved_param.name);
+                r.type_vec = resolved_param.type_vec;
+                return Some(r);
+            } else if let Some(mut r) = resolve_union(btf, resolved_param.type_id) {
                 r.type_vec = resolved_param.type_vec;
                 return Some(r);
             } else {
@@ -402,6 +456,17 @@ pub fn btf_iterate_over_names_chain(
                         type_id = member.get_type_id().unwrap_or_default();
                         break;
                     }
+                    Type::Union(u) => {
+                        let member = if let Some(m) =
+                            u.members.iter().find(|&m| btf.resolve_name(m).unwrap().eq(name))
+                        {
+                            m
+                        } else {
+                            return None;
+                        };
+                        type_id = member.get_type_id().unwrap_or_default();
+                        break;
+                    }
                     // TODO
                     // Type::Int(i) =>(),  /* get_int_type_vec(btf, &i, &mut item.type_vec), */
                     // Type::Typedef(t) =>(),  /* get_typedef_type_vec(btf, &t, &mut item.type_vec), */
@@ -414,7 +479,10 @@ pub fn btf_iterate_over_names_chain(
             }
         }
 
-        return resolve_struct(btf, type_id);
+        if let Some(r) = resolve_struct(btf, type_id) {
+            return Some(r);
+        }
+        return resolve_union(btf, type_id);
     } else {
         return Some(func);
     }
@@ -539,5 +607,32 @@ mod tests {
             .find(|&r| r.name == "vgc_level")
             .unwrap();
         assert!(vgc_level.type_vec == vec!("u8"));
+    }
+
+    #[test]
+    fn test_resolve_k_itimer_union() {
+        let btf = btf_setup_module("vmlinux").unwrap();
+        let base = btf_resolve_func(&btf, "posixtimer_send_sigqueue").unwrap();
+        let resolved =
+            btf_iterate_over_names_chain(&btf, base.clone(), "args.tmr->it").unwrap();
+
+        assert!(resolved.type_vec.iter().any(|s| s == "union"));
+
+        let cpu_member = resolved
+            .children_vec
+            .iter()
+            .find(|&r| r.name == "cpu")
+            .unwrap();
+
+        assert!(cpu_member.type_vec.iter().any(|s| s == "cpu_timer"));
+        assert!(cpu_member.type_vec.iter().any(|s| s == "struct"));
+
+        let real_member = resolved
+            .children_vec
+            .iter()
+            .find(|&r| r.name == "real")
+            .unwrap();
+
+        assert!(real_member.type_vec.iter().any(|s| s == "struct"));
     }
 }
