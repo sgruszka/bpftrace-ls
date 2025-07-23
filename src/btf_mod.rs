@@ -160,41 +160,26 @@ fn resolve_union(btf: &Btf, base_id: u32) -> Option<ResolvedBtfItem> {
 }
 
 fn resolve_pointer(btf: &Btf, ptr: &btf::Ptr, item: &mut ResolvedBtfItem) {
-    match btf.resolve_chained_type(ptr).unwrap() {
+    let chained_type = btf.resolve_chained_type(ptr).unwrap();
+
+    let final_type = match chained_type {
         Type::Const(c) => {
             item.type_vec.push("const".to_string());
-            // TODO: use macro to handle duplication ?
-            match btf.resolve_chained_type(&c).unwrap() {
-                Type::Struct(s) => {
-                    item.type_id = c.get_type_id().unwrap_or_default();
-                    get_struct_type_vec(btf, &s, &mut item.type_vec);
-                }
-                Type::Typedef(t) => {
-                    item.type_id = c.get_type_id().unwrap_or_default();
-                    get_typedef_type_vec(btf, &t, &mut item.type_vec);
-                }
-                Type::Union(u) => {
-                    item.type_id = c.get_type_id().unwrap_or_default();
-                    get_union_type_vec(btf, &u, &mut item.type_vec);
-                }
-                x => log_dbg!(BTFRE, "{} {}: Unhandled type {:?}", file!(), line!(), x),
-            };
+            item.type_id = c.get_type_id().unwrap_or_default();
+            btf.resolve_chained_type(&c).unwrap()
         }
-        Type::Struct(s) => {
+        other => {
             item.type_id = ptr.get_type_id().unwrap_or_default();
-            get_struct_type_vec(btf, &s, &mut item.type_vec);
+            other
         }
+    };
+
+    match final_type {
+        Type::Struct(s) => get_struct_type_vec(btf, &s, &mut item.type_vec),
+        Type::Typedef(t) => get_typedef_type_vec(btf, &t, &mut item.type_vec),
+        Type::Union(u) => get_union_type_vec(btf, &u, &mut item.type_vec),
         Type::Void => {
-            item.type_id = ptr.get_type_id().unwrap_or_default();
             item.type_vec.push("void".to_string());
-        }
-        Type::Typedef(t) => {
-            item.type_id = ptr.get_type_id().unwrap_or_default();
-            get_typedef_type_vec(btf, &t, &mut item.type_vec);
-        }
-        Type::Union(u) => {
-            item.type_id = ptr.get_type_id().unwrap_or_default();
-            get_union_type_vec(btf, &u, &mut item.type_vec);
         }
         x => log_dbg!(BTFRE, "{} {}: Unhandled type {:?}", file!(), line!(), x),
     };
