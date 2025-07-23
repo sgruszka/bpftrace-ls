@@ -178,6 +178,7 @@ fn resolve_pointer(btf: &Btf, ptr: &btf::Ptr, item: &mut ResolvedBtfItem) {
         Type::Struct(s) => get_struct_type_vec(btf, &s, &mut item.type_vec),
         Type::Typedef(t) => get_typedef_type_vec(btf, &t, &mut item.type_vec),
         Type::Union(u) => get_union_type_vec(btf, &u, &mut item.type_vec),
+        Type::Int(i) => get_int_type_vec(btf, &i, &mut item.type_vec),
         Type::Void => {
             item.type_vec.push("void".to_string());
         }
