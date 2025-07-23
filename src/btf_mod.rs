@@ -31,13 +31,13 @@ fn get_array_type_vec(btf: &Btf, a: &btf::Array, type_vec: &mut Vec<String>) {
 fn get_struct_type_vec(btf: &Btf, st: &btf::Struct, type_vec: &mut Vec<String>) {
     type_vec.push("struct".to_string());
     let st_name = btf.resolve_name(st).unwrap_or_default();
-    type_vec.push(st_name.clone());
+    type_vec.push(st_name);
 }
 
 fn get_union_type_vec(btf: &Btf, u: &btf::Union, type_vec: &mut Vec<String>) {
     type_vec.push("union".to_string());
     let u_name = btf.resolve_name(u).unwrap_or_default();
-    type_vec.push(u_name.clone());
+    type_vec.push(u_name);
 }
 
 fn resolve_struct_member(btf: &Btf, member: &btf::Member, id: u32) -> ResolvedBtfItem {
