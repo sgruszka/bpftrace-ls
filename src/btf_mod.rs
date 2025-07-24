@@ -590,7 +590,13 @@ mod tests {
     #[test]
     // #[ignore]
     fn test_resolve_rt2800_link_tuner() {
-        let btf = btf_setup_module("rt2800lib").unwrap();
+        let btf = match btf_setup_module("rt2800lib") {
+            Some(btf) => btf,
+            None => {
+                eprintln!("\x1b[33mskipped\x1b[0m: rt2800lib module not loaded");
+                return;
+            }
+        };
         let base = btf_resolve_func(&btf, "rt2800_link_tuner").unwrap();
         let resolved = btf_iterate_over_names_chain(&btf, base.clone(), "qual->").unwrap();
 
@@ -632,7 +638,13 @@ mod tests {
     #[test]
     fn test_resolve_ieee80211_hw_array_in_struct() {
         // This test requires mac80211 module to be loaded
-        let btf = btf_setup_module("mac80211").unwrap();
+        let btf = match btf_setup_module("mac80211") {
+            Some(btf) => btf,
+            None => {
+                eprintln!("\x1b[33mskipped\x1b[0m: mac80211 module not loaded");
+                return;
+            }
+        };
         let base = btf_resolve_func(&btf, "ieee80211_register_hw").unwrap();
 
         // The argument is struct ieee80211_hw *hw

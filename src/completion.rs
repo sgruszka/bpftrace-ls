@@ -743,7 +743,7 @@ mod tests {
 
     #[test]
     fn test_find_probe_args() {
-        compare_btf_and_cmd("kfunc:rt2800lib:rt2800_link_tuner");
+        compare_btf_and_cmd("kfunc:vmlinux:posixtimer_free_timer");
         compare_btf_and_cmd("kfunc:vmlinux:acpi_unregister_gsi");
         compare_btf_and_cmd("kfunc:vmlinux:acpi_register_gsi");
         compare_btf_and_cmd("kfunc:vmlinux:vfs_open");
