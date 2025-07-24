@@ -24,8 +24,14 @@ fn get_typedef_type_vec(btf: &Btf, t: &btf::Typedef, type_vec: &mut Vec<String>)
 }
 
 fn get_array_type_vec(btf: &Btf, a: &btf::Array, type_vec: &mut Vec<String>) {
-    let array_name = btf.resolve_name(a).unwrap_or_default();
-    type_vec.push(array_name);
+    let mut temp_item = ResolvedBtfItem::default();
+    resolve_type_id(
+        btf,
+        a.get_type_id().unwrap_or_default(),
+        &mut temp_item,
+    );
+    type_vec.extend(temp_item.type_vec);
+    type_vec.push("[]".to_string());
 }
 
 fn get_struct_type_vec(btf: &Btf, st: &btf::Struct, type_vec: &mut Vec<String>) {
@@ -179,6 +185,7 @@ fn resolve_pointer(btf: &Btf, ptr: &btf::Ptr, item: &mut ResolvedBtfItem) {
         Type::Typedef(t) => get_typedef_type_vec(btf, &t, &mut item.type_vec),
         Type::Union(u) => get_union_type_vec(btf, &u, &mut item.type_vec),
         Type::Int(i) => get_int_type_vec(btf, &i, &mut item.type_vec),
+        Type::Array(a) => get_array_type_vec(btf, &a, &mut item.type_vec),
         Type::Void => {
             item.type_vec.push("void".to_string());
         }
@@ -620,5 +627,23 @@ mod tests {
             .unwrap();
 
         assert!(real_member.type_vec.iter().any(|s| s == "struct"));
+    }
+
+    #[test]
+    fn test_resolve_ieee80211_hw_array_in_struct() {
+        // This test requires mac80211 module to be loaded
+        let btf = btf_setup_module("mac80211").unwrap();
+        let base = btf_resolve_func(&btf, "ieee80211_register_hw").unwrap();
+
+        // The argument is struct ieee80211_hw *hw
+        let hw = btf_iterate_over_names_chain(&btf, base.clone(), "args.hw").unwrap();
+
+        let flags = hw
+            .children_vec
+            .iter()
+            .find(|&r| r.name == "flags")
+            .unwrap();
+
+        assert_eq!(flags.type_vec, vec!["long unsigned int", "[]"]);
     }
 }
