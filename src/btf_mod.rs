@@ -323,6 +323,32 @@ fn resolve_parameter(btf: &Btf, param: &btf::Parameter) -> ResolvedBtfItem {
     parameter_item
 }
 
+fn is_pointer_type(btf: &Btf, base_id: u32) -> bool {
+    let mut id = base_id;
+    loop {
+        if id == 0 {
+            return false;
+        }
+        // TOOD: Fix unwrap();
+        match btf.resolve_type_by_id(id).unwrap() {
+            Type::Const(c) => {
+                id = c.get_type_id().unwrap_or_default();
+                continue;
+            }
+            Type::Volatile(v) => {
+                id = v.get_type_id().unwrap_or_default();
+                continue;
+            }
+            Type::Ptr(_) => {
+                return true;
+            }
+            _ => {
+                return false;
+            }
+        }
+    }
+}
+
 pub fn btf_resolve_func(btf: &Btf, name: &str) -> Option<ResolvedBtfItem> {
     log_dbg!(BTFRE, "LOOKING FOR {}", name);
     if let Err(_) = btf.resolve_types_by_name(name) {
@@ -442,14 +468,33 @@ pub fn btf_iterate_over_names_chain(
             }
         }
 
+        // Handle struct/union members: use -> for pointrs and . for direct access
         let mut type_id = first_param.get_type_id().unwrap_or_default();
         let mut last_name = *first_name;
-        for name in names_iter {
-            // TODO: Differenciate between name beeing pointer or embeded structure i.e
-            // pointer_to_struct->field vs struct.field
-            if *name == "->" || *name == "." {
-                continue;
+        let mut names_iter_peek = names_iter.peekable();
+        while let Some(op) = names_iter_peek.next() {
+            let is_pointer = is_pointer_type(btf, type_id);
+            if *op == "->" {
+                if !is_pointer {
+                    return None;
+                }
+            } else if *op == "." {
+                if is_pointer {
+                    return None;
+                }
+            } else {
+                return None;
             }
+
+            let member_name = if let Some(name) = names_iter_peek.next() {
+                name
+            } else {
+                if *names_chain_vec.last().unwrap() == "->" ||
+                   *names_chain_vec.last().unwrap() == "." {
+                    break;
+                }
+                return None;
+            };
 
             loop {
                 if type_id == 0 {
@@ -470,26 +515,24 @@ pub fn btf_iterate_over_names_chain(
                         let member = if let Some(m) = st
                             .members
                             .iter()
-                            .find(|&m| btf.resolve_name(m).unwrap().eq(name))
-                        {
+                            .find(|&m| btf.resolve_name(m).unwrap().eq(member_name)) {
                             m
                         } else {
                             return None;
                         };
                         type_id = member.get_type_id().unwrap_or_default();
-                        last_name = name;
+                        last_name = member_name;
                         break;
                     }
                     Type::Union(u) => {
                         let member = if let Some(m) =
-                            u.members.iter().find(|&m| btf.resolve_name(m).unwrap().eq(name))
-                        {
+                            u.members.iter().find(|&m| btf.resolve_name(m).unwrap().eq(member_name)) {
                             m
                         } else {
                             return None;
                         };
                         type_id = member.get_type_id().unwrap_or_default();
-                        last_name = name;
+                        last_name = member_name;
                         break;
                     }
                     // TODO
@@ -587,6 +630,9 @@ mod tests {
             resolved_func.type_vec,
             vec!["void (*)( struct callback_head * )"]
         );
+
+        let resolved_fail = btf_iterate_over_names_chain(&btf, base.clone(), "args.ns->rcu->next");
+        assert!(resolved_fail.is_none());
     }
 
     #[test]
@@ -609,9 +655,13 @@ mod tests {
         assert!(resolved.children_vec.len() > 0);
 
         let resolved =
-            btf_iterate_over_names_chain(&btf, base, "args.path->dentry->d_inode").unwrap();
+            btf_iterate_over_names_chain(&btf, base.clone(), "args.path->dentry->d_inode").unwrap();
         assert!(resolved.name == "d_inode");
         assert!(resolved.children_vec.len() > 0);
+
+        let resolved_fail =
+            btf_iterate_over_names_chain(&btf, base.clone(), "args.path.dentry");
+        assert!(resolved_fail.is_none());
 
         let i_state = resolved
             .children_vec
