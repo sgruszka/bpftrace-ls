@@ -350,9 +350,9 @@ fn is_pointer_type(btf: &Btf, base_id: u32) -> bool {
 }
 
 pub fn btf_resolve_func(btf: &Btf, name: &str) -> Option<ResolvedBtfItem> {
-    log_dbg!(BTFRE, "LOOKING FOR {}", name);
+    log_dbg!(BTFRE, "Looking for {}", name);
     if let Err(_) = btf.resolve_types_by_name(name) {
-        log_dbg!(BTFRE, "LOOKING FOR {} FAILED", name);
+        log_dbg!(BTFRE, "Looking for {} failed", name);
         return None;
     }
     let func = match btf.resolve_types_by_name(name).unwrap().pop().unwrap() {
