@@ -42,7 +42,7 @@ mod completion;
 pub mod log_mod;
 pub mod btf_mod;
 
-use log_mod::{DIAGN, NOTIF, PROTO, VERBOSE_DEBUG};
+use log_mod::{DIAGN, NOTIF, PROTO};
 
 #[derive(Debug)]
 enum LspMessageType {

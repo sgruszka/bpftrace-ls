@@ -8,7 +8,7 @@ use std::sync::Mutex;
 use crate::btf_mod::{
     btf_iterate_over_names_chain, btf_resolve_func, btf_setup_module, ResolvedBtfItem,
 };
-use crate::log_mod::{self, COMPL, HOVER, VERBOSE_DEBUG};
+use crate::log_mod::{self, COMPL, HOVER};
 // use crate::DocumentsState;
 use crate::DOCUMENTS_STATE;
 use crate::{log_dbg, log_vdbg};

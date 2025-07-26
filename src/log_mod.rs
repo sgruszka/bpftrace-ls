@@ -10,8 +10,6 @@ pub const NOTIF: u32 = 1 << 3;
 pub const HOVER: u32 = 1 << 4;
 pub const BTFRE: u32 = 1 << 5;
 
-pub const VERBOSE_DEBUG: u32 = 0;
-
 #[macro_export()]
 macro_rules! log_err {
     ($fmt:expr) => {
@@ -51,21 +49,21 @@ macro_rules! log_dbg {
 #[macro_export()]
 macro_rules! log_vdbg {
     ($type:expr, $fmt:expr) => {
-        if VERBOSE_DEBUG != 0 {
+        if $crate::log_mod::is_verbose() {
             let msg = format!($fmt);
             let prefix = format!("{} {}:", file!(), line!());
             let full_msg = format!("{:<20} {}", prefix, msg);
-            log_mod::log_cond_fn($type, &full_msg);
+            $crate::log_mod::log_cond_fn($type, &full_msg);
         }
     };
 
     ($type:expr, $fmt:expr, $( $arg:tt )* ) => {
         {
-        if VERBOSE_DEBUG != 0 {
+        if $crate::log_mod::is_verbose() {
             let msg = format!($fmt, $( $arg )* );
             let prefix = format!("{} {}:", file!(), line!());
             let full_msg = format!("{:<20} {}", prefix, msg);
-            log_mod::log_cond_fn($type, &full_msg);
+            $crate::log_mod::log_cond_fn($type, &full_msg);
             }
         }
     };
@@ -75,12 +73,18 @@ macro_rules! log_vdbg {
 pub struct Logger {
     name: String,
     mask: u32,
+    verbose_debug: u32,
 }
 
 static LOGGER: OnceCell<Logger> = OnceCell::new();
 
 // TODO: handle errors without expect()
 pub fn create_logger(filename: &str) -> Result<(), std::io::Error> {
+    let verbose_level = match env::var("BPFTRACE_LS_LOG_VERBOSE") {
+        Ok(val) => val.parse::<u32>().unwrap_or(0),
+        Err(_) => 0,
+    };
+
     const DEFAULT_MASK: u32 = PROTO;
     let mask = match env::var("BPFTRACE_LS_LOG_MASK") {
         Ok(val) => {
@@ -119,11 +123,20 @@ pub fn create_logger(filename: &str) -> Result<(), std::io::Error> {
         .set(Logger {
             name: filename.to_string(),
             mask,
+            verbose_debug: verbose_level,
         })
         .expect("Was already initalized");
     // Create / truncate the file every time we run
     let _f = File::create(filename)?;
     Ok(())
+}
+
+pub fn is_verbose() -> bool {
+    if let Some(logger) = LOGGER.get() {
+        logger.verbose_debug != 0
+    } else {
+        false
+    }
 }
 
 pub fn log_fn(txt: &str) {
