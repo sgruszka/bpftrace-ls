@@ -137,7 +137,7 @@ fn argument_next_item(
     let module_btf_map = MODULE_BTF_MAP.lock().unwrap();
 
     if let Some(btf) = module_btf_map.get(&module) {
-        if let Some(resolved) = btf_iterate_over_names_chain(&btf, resolved_func, this_argument) {
+        if let Some(resolved) = btf_iterate_over_names_chain(&btf, &resolved_func, this_argument) {
             return resolved;
         }
     }

@@ -424,7 +424,7 @@ fn chain_str_to_tokens(names_chain: &str) -> Vec<&str> {
 
 pub fn btf_iterate_over_names_chain(
     btf: &Btf,
-    func: ResolvedBtfItem,
+    func: &ResolvedBtfItem,
     names_chain_str: &str,
 ) -> Option<ResolvedBtfItem> {
     let mut names_chain_vec = chain_str_to_tokens(names_chain_str);
@@ -560,7 +560,7 @@ pub fn btf_iterate_over_names_chain(
         resolve_type_id(btf, type_id, &mut item);
         Some(item)
     } else {
-        return Some(func);
+        return Some(func.clone());
     }
 }
 
@@ -619,19 +619,19 @@ mod tests {
         let base = btf_resolve_func(&btf, "alloc_pid").unwrap();
 
         let resolved =
-            btf_iterate_over_names_chain(&btf, base.clone(), "args.ns->rcu.next").unwrap();
+            btf_iterate_over_names_chain(&btf, &base, "args.ns->rcu.next").unwrap();
         assert!(resolved.name == "next");
         assert!(resolved.children_vec[0].name == "next");
 
         let resolved_func =
-            btf_iterate_over_names_chain(&btf, base.clone(), "args.ns->rcu.func").unwrap();
+            btf_iterate_over_names_chain(&btf, &base, "args.ns->rcu.func").unwrap();
         assert!(resolved_func.name == "func");
         assert_eq!(
             resolved_func.type_vec,
             vec!["void (*)( struct callback_head * )"]
         );
 
-        let resolved_fail = btf_iterate_over_names_chain(&btf, base.clone(), "args.ns->rcu->next");
+        let resolved_fail = btf_iterate_over_names_chain(&btf, &base, "args.ns->rcu->next");
         assert!(resolved_fail.is_none());
     }
 
@@ -643,24 +643,24 @@ mod tests {
         let base = btf_resolve_func(&btf, "vfs_open").unwrap();
         assert!(base.name == "vfs_open");
 
-        let resolved = btf_iterate_over_names_chain(&btf, base.clone(), "").unwrap();
+        let resolved = btf_iterate_over_names_chain(&btf, &base, "").unwrap();
         assert!(resolved.name == "vfs_open");
         assert!(resolved.children_vec.len() == 3);
         assert!(resolved.children_vec[0].name == "path");
         assert!(resolved.children_vec[2].name == "retval");
 
-        let resolved = btf_iterate_over_names_chain(&btf, base.clone(), "args.path").unwrap();
+        let resolved = btf_iterate_over_names_chain(&btf, &base, "args.path").unwrap();
         assert!(resolved.name == "path");
         assert!(resolved.type_vec == vec!["const", "struct", "path", "*"]);
         assert!(resolved.children_vec.len() > 0);
 
         let resolved =
-            btf_iterate_over_names_chain(&btf, base.clone(), "args.path->dentry->d_inode").unwrap();
+            btf_iterate_over_names_chain(&btf, &base, "args.path->dentry->d_inode").unwrap();
         assert!(resolved.name == "d_inode");
         assert!(resolved.children_vec.len() > 0);
 
         let resolved_fail =
-            btf_iterate_over_names_chain(&btf, base.clone(), "args.path.dentry");
+            btf_iterate_over_names_chain(&btf, &base, "args.path.dentry");
         assert!(resolved_fail.is_none());
 
         let i_state = resolved
@@ -696,7 +696,7 @@ mod tests {
             }
         };
         let base = btf_resolve_func(&btf, "rt2800_link_tuner").unwrap();
-        let resolved = btf_iterate_over_names_chain(&btf, base.clone(), "qual->").unwrap();
+        let resolved = btf_iterate_over_names_chain(&btf, &base, "qual->").unwrap();
 
         let vgc_level = resolved
             .children_vec
@@ -711,7 +711,7 @@ mod tests {
         let btf = btf_setup_module("vmlinux").unwrap();
         let base = btf_resolve_func(&btf, "posixtimer_send_sigqueue").unwrap();
         let resolved =
-            btf_iterate_over_names_chain(&btf, base.clone(), "args.tmr->it").unwrap();
+            btf_iterate_over_names_chain(&btf, &base, "args.tmr->it").unwrap();
 
         assert!(resolved.type_vec.iter().any(|s| s == "union"));
 
@@ -746,7 +746,7 @@ mod tests {
         let base = btf_resolve_func(&btf, "ieee80211_register_hw").unwrap();
 
         // The argument is struct ieee80211_hw *hw
-        let hw = btf_iterate_over_names_chain(&btf, base.clone(), "args.hw").unwrap();
+        let hw = btf_iterate_over_names_chain(&btf, &base, "args.hw").unwrap();
 
         let flags = hw
             .children_vec
