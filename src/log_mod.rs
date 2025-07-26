@@ -1,4 +1,5 @@
 use once_cell::sync::OnceCell;
+use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 
@@ -80,10 +81,44 @@ static LOGGER: OnceCell<Logger> = OnceCell::new();
 
 // TODO: handle errors without expect()
 pub fn create_logger(filename: &str) -> Result<(), std::io::Error> {
+    const DEFAULT_MASK: u32 = PROTO;
+    let mask = match env::var("BPFTRACE_LS_LOG_MASK") {
+        Ok(val) => {
+            let mut mask = 0_u32;
+            if val.is_empty() {
+                // fall through to default
+            } else if let Ok(num) = val.parse::<u32>() {
+                mask = num;
+            } else if let Some(stripped) = val.strip_prefix("0x") {
+                if let Ok(num) = u32::from_str_radix(stripped, 16) {
+                    mask = num;
+                }
+            } else {
+                for component in val.split(',') {
+                    match component.trim().to_uppercase().as_str() {
+                        "PROTO" => mask |= PROTO,
+                        "DIAGN" => mask |= DIAGN,
+                        "COMPL" => mask |= COMPL,
+                        "NOTIF" => mask |= NOTIF,
+                        "HOVER" => mask |= HOVER,
+                        "BTFRE" => mask |= BTFRE,
+                        _ => {} // ignore unknown components
+                    }
+                }
+            }
+
+            if mask == 0 {
+                DEFAULT_MASK
+            } else {
+                mask
+            }
+        }
+        Err(_) => DEFAULT_MASK,
+    };
     LOGGER
         .set(Logger {
             name: filename.to_string(),
-            mask: PROTO | COMPL, // HOVER | BTFRE,
+            mask,
         })
         .expect("Was already initalized");
     // Create / truncate the file every time we run
