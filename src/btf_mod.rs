@@ -45,6 +45,10 @@ fn get_union_type_vec(btf: &Btf, u: &btf::Union, type_vec: &mut Vec<String>) {
     let u_name = btf.resolve_name(u).unwrap_or_default();
     type_vec.push(u_name);
 }
+fn get_enum_type_vec(btf: &Btf, e: &btf::Enum, type_vec: &mut Vec<String>) {
+    let e_name = btf.resolve_name(e).unwrap_or_default();
+    type_vec.push(e_name);
+}
 
 fn get_func_proto_type_vec(btf: &Btf, fp: &btf::FuncProto, type_vec: &mut Vec<String>) {
     let mut ret_item = ResolvedBtfItem::default();
@@ -255,6 +259,11 @@ fn resolve_type_id(btf: &Btf, id: u32, param_item: &mut ResolvedBtfItem) {
             Type::Int(i) => {
                 param_item.type_id = i.get_type_id().unwrap_or_default();
                 get_int_type_vec(btf, &i, &mut param_item.type_vec);
+                break;
+            }
+            Type::Enum(e) => {
+                param_item.type_id = e.get_type_id().unwrap_or_default();
+                get_enum_type_vec(btf, &e, &mut param_item.type_vec);
                 break;
             }
             x => {
