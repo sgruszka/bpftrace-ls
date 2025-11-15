@@ -10,6 +10,7 @@ use crate::btf_mod::{
 };
 use crate::log_mod::{self, COMPL, HOVER};
 // use crate::DocumentsState;
+use crate::parser;
 use crate::DOCUMENTS_STATE;
 use crate::{log_dbg, log_vdbg};
 use btf_rs::Btf;
@@ -546,6 +547,8 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
 
     let text = get_text(&uri);
     let line_str = get_line(&uri, line_nr);
+
+    parser::ts_parse(&text);
 
     log_dbg!(COMPL, "Complete for line: '{}'", line_str);
 

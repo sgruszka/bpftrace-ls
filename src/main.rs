@@ -37,10 +37,12 @@ impl DocumentsState {
     }
 }
 
+pub mod btf_mod;
 mod completion;
+pub mod parser;
+
 #[macro_use]
 pub mod log_mod;
-pub mod btf_mod;
 
 use log_mod::{DIAGN, NOTIF, PROTO};
 
@@ -338,7 +340,7 @@ fn send_diag_command(uri: String, diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
     let Some(text_doc) = DOCUMENTS_STATE.get(&uri) else {
         log_dbg!(DIAGN, "No text document for {}", uri);
         return;
-		};
+    };
     let version = text_doc.version;
 
     log_dbg!(
