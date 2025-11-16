@@ -675,7 +675,7 @@ mod tests {
             .iter()
             .find(|&r| r.name == "i_ino")
             .unwrap();
-        assert!(i_state.type_vec == vec!("long unsigned int"));
+        assert!(i_state.type_vec == vec!("unsigned long"));
 
         let i_count = resolved
             .children_vec
@@ -756,6 +756,6 @@ mod tests {
 
         let flags = hw.children_vec.iter().find(|&r| r.name == "flags").unwrap();
 
-        assert_eq!(flags.type_vec, vec!["long unsigned int", "[]"]);
+        assert_eq!(flags.type_vec, vec!["unsigned long", "[]"]);
     }
 }
