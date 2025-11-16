@@ -25,11 +25,7 @@ fn get_typedef_type_vec(btf: &Btf, t: &btf::Typedef, type_vec: &mut Vec<String>)
 
 fn get_array_type_vec(btf: &Btf, a: &btf::Array, type_vec: &mut Vec<String>) {
     let mut temp_item = ResolvedBtfItem::default();
-    resolve_type_id(
-        btf,
-        a.get_type_id().unwrap_or_default(),
-        &mut temp_item,
-    );
+    resolve_type_id(btf, a.get_type_id().unwrap_or_default(), &mut temp_item);
     type_vec.extend(temp_item.type_vec);
     type_vec.push("[]".to_string());
 }
@@ -498,8 +494,9 @@ pub fn btf_iterate_over_names_chain(
             let member_name = if let Some(name) = names_iter_peek.next() {
                 name
             } else {
-                if *names_chain_vec.last().unwrap() == "->" ||
-                   *names_chain_vec.last().unwrap() == "." {
+                if *names_chain_vec.last().unwrap() == "->"
+                    || *names_chain_vec.last().unwrap() == "."
+                {
                     break;
                 }
                 return None;
@@ -524,7 +521,8 @@ pub fn btf_iterate_over_names_chain(
                         let member = if let Some(m) = st
                             .members
                             .iter()
-                            .find(|&m| btf.resolve_name(m).unwrap().eq(member_name)) {
+                            .find(|&m| btf.resolve_name(m).unwrap().eq(member_name))
+                        {
                             m
                         } else {
                             return None;
@@ -534,8 +532,11 @@ pub fn btf_iterate_over_names_chain(
                         break;
                     }
                     Type::Union(u) => {
-                        let member = if let Some(m) =
-                            u.members.iter().find(|&m| btf.resolve_name(m).unwrap().eq(member_name)) {
+                        let member = if let Some(m) = u
+                            .members
+                            .iter()
+                            .find(|&m| btf.resolve_name(m).unwrap().eq(member_name))
+                        {
                             m
                         } else {
                             return None;
@@ -627,13 +628,11 @@ mod tests {
 
         let base = btf_resolve_func(&btf, "alloc_pid").unwrap();
 
-        let resolved =
-            btf_iterate_over_names_chain(&btf, &base, "args.ns->rcu.next").unwrap();
+        let resolved = btf_iterate_over_names_chain(&btf, &base, "args.ns->rcu.next").unwrap();
         assert!(resolved.name == "next");
         assert!(resolved.children_vec[0].name == "next");
 
-        let resolved_func =
-            btf_iterate_over_names_chain(&btf, &base, "args.ns->rcu.func").unwrap();
+        let resolved_func = btf_iterate_over_names_chain(&btf, &base, "args.ns->rcu.func").unwrap();
         assert!(resolved_func.name == "func");
         assert_eq!(
             resolved_func.type_vec,
@@ -668,8 +667,7 @@ mod tests {
         assert!(resolved.name == "d_inode");
         assert!(resolved.children_vec.len() > 0);
 
-        let resolved_fail =
-            btf_iterate_over_names_chain(&btf, &base, "args.path.dentry");
+        let resolved_fail = btf_iterate_over_names_chain(&btf, &base, "args.path.dentry");
         assert!(resolved_fail.is_none());
 
         let i_state = resolved
@@ -719,8 +717,7 @@ mod tests {
     fn test_resolve_k_itimer_union() {
         let btf = btf_setup_module("vmlinux").unwrap();
         let base = btf_resolve_func(&btf, "posixtimer_send_sigqueue").unwrap();
-        let resolved =
-            btf_iterate_over_names_chain(&btf, &base, "args.tmr->it").unwrap();
+        let resolved = btf_iterate_over_names_chain(&btf, &base, "args.tmr->it").unwrap();
 
         assert!(resolved.type_vec.iter().any(|s| s == "union"));
 
@@ -757,11 +754,7 @@ mod tests {
         // The argument is struct ieee80211_hw *hw
         let hw = btf_iterate_over_names_chain(&btf, &base, "args.hw").unwrap();
 
-        let flags = hw
-            .children_vec
-            .iter()
-            .find(|&r| r.name == "flags")
-            .unwrap();
+        let flags = hw.children_vec.iter().find(|&r| r.name == "flags").unwrap();
 
         assert_eq!(flags.type_vec, vec!["long unsigned int", "[]"]);
     }
