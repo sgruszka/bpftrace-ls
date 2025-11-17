@@ -713,6 +713,9 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static URI_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
     fn compare_btf_and_cmd(s: &str) {
         let args_by_cmd = find_probe_args_by_command(s);
         let args_by_btf = find_kfunc_args_by_btf(s);
@@ -744,6 +747,41 @@ mod tests {
         assert!(resolved_btf.children_vec.len() == n);
     }
 
+    fn completion_setup(text: &str, line_nr: usize, char_nr: usize) -> json::JsonValue {
+        let uri = format!(
+            "file:///completion_test{}.bt",
+            URI_COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+
+        DOCUMENTS_STATE.set(uri.to_string(), text.to_string(), 1);
+
+        object! {
+            "params": {
+                "textDocument": {
+                    "uri": uri,
+                },
+                "position": {
+                    "line": line_nr,
+                    "character": char_nr,
+                }
+            }
+        }
+    }
+
+    fn check_completion_resutls(result: json::JsonValue, values: Vec<&str>) {
+        let labels: Vec<_> = result["result"]["items"]
+            .members()
+            .map(|item| item["label"].to_string())
+            .collect();
+
+        for val in values.iter() {
+            assert!(
+                labels.contains(&val.to_string()),
+                "'{val}' missed in completion result"
+            );
+        }
+    }
+
     #[test]
     fn test_find_probe_args() {
         compare_btf_and_cmd("kfunc:vmlinux:posixtimer_free_timer");
@@ -754,56 +792,24 @@ mod tests {
 
     #[test]
     fn test_completion_for_action() {
-        let uri = "file:///test.bt";
         let text = "kprobe:do_sys_open { ";
+        let json_content = completion_setup(text, 0, text.len() - 1);
 
-        DOCUMENTS_STATE.set(uri.to_string(), text.to_string(), 1);
-
-        let content = object! {
-            "params": {
-                "textDocument": {
-                    "uri": uri,
-                },
-                "position": {
-                    "line": 0,
-                    "character": text.len() - 1,
-                }
-            }
-        };
-
-        let result = encode_completion(content.clone());
+        let result = encode_completion(json_content);
         assert!(result["result"]["items"].len() > 0);
 
         // TODO other items than printf
-        let labels: Vec<_> = result["result"]["items"]
-            .members()
-            .map(|item| item["label"].to_string())
-            .collect();
-        assert!(labels.contains(&"printf".to_string()));
+        check_completion_resutls(result, vec!["printf"]);
     }
 
     #[test]
     fn test_completion_for_empty_line() {
-        let uri = "file:///empty.bt";
-        let text = "";
-        DOCUMENTS_STATE.set(uri.to_string(), text.to_string(), 1);
+        let json_content = completion_setup("", 0, 0);
 
-        let content = object! {
-            "params": {
-                "textDocument": {
-                    "uri": uri,
-                },
-                "position": {
-                    "line": 0,
-                    "character": 0,
-                }
-            }
-        };
-
-        let result = encode_completion(content.clone());
+        let result = encode_completion(json_content);
         assert!(result["result"]["items"].len() > 0);
 
-        let prefixes = [
+        let prefixes = vec![
             "iter",
             "hardware",
             "tracepoint:",
@@ -814,12 +820,6 @@ mod tests {
             "kfunc",
             "kretfunc",
         ];
-        let labels: Vec<_> = result["result"]["items"]
-            .members()
-            .map(|item| item["label"].to_string())
-            .collect();
-        for prefix in prefixes.iter() {
-            assert!(labels.contains(&prefix.to_string()));
-        }
+        check_completion_resutls(result, prefixes);
     }
 }
