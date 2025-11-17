@@ -1,8 +1,12 @@
 use json::{self, object};
 // use once_cell::sync::OnceCell;
+use tree_sitter;
+use tree_sitter_bpftrace;
+
 use once_cell::sync::Lazy;
 use std::{
     collections::HashMap,
+    hash::Hash,
     io::{self, Read, Write},
     process::Command,
     sync::{mpsc, Arc, RwLock},
@@ -19,21 +23,48 @@ pub const JSON_RPC_VERSION: &str = "2.0";
 pub struct TextDocument {
     text: String,
     version: u64,
+    syntax_tree: Option<tree_sitter::Tree>,
 }
-pub struct DocumentsState(Lazy<RwLock<HashMap<String, Arc<TextDocument>>>>);
+
+pub struct DocumentsData {
+    map: HashMap<String, Arc<TextDocument>>,
+    parser: tree_sitter::Parser,
+}
+
+impl DocumentsData {
+    fn new() -> Self {
+        let map = HashMap::new();
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_bpftrace::LANGUAGE.into())
+            .expect("Error loading bpftrace grammar"); //TODO
+        Self { map, parser }
+    }
+}
+
+pub struct DocumentsState(Lazy<RwLock<DocumentsData>>);
 
 pub static DOCUMENTS_STATE: DocumentsState =
-    DocumentsState(Lazy::new(|| RwLock::new(HashMap::new())));
+    DocumentsState(Lazy::new(|| RwLock::new(DocumentsData::new())));
 
 impl DocumentsState {
     fn get(&self, uri: &str) -> Option<Arc<TextDocument>> {
         let read_guard = self.0.read().unwrap();
-        read_guard.get(uri).cloned()
+        read_guard.map.get(uri).cloned()
     }
 
-    fn set(&self, uri: String, text_doc: Arc<TextDocument>) {
+    fn set(&self, uri: String, text: String, version: u64) {
         let mut write_guard = self.0.write().unwrap();
-        write_guard.insert(uri, text_doc);
+
+        // TODO: refactor to avoid text.clone()
+        let syntax_tree = write_guard.parser.parse(text.clone().as_bytes(), None);
+
+        let text_doc = Arc::new(TextDocument {
+            text,
+            version,
+            syntax_tree,
+        });
+        write_guard.map.insert(uri, text_doc);
     }
 }
 
@@ -96,8 +127,7 @@ fn handle_notification(method: String, content: json::JsonValue) -> Notification
             let text = text_document["text"].to_string();
             let version = text_document["version"].as_u64().unwrap_or_default();
 
-            let text_doc = Arc::new(TextDocument { text, version });
-            DOCUMENTS_STATE.set(uri.clone(), text_doc);
+            DOCUMENTS_STATE.set(uri.clone(), text, version);
 
             log_dbg!(NOTIF, "Open: textDocument: {}", text_document);
             return NotificationAction::SendDiagnostics(uri);
@@ -110,8 +140,8 @@ fn handle_notification(method: String, content: json::JsonValue) -> Notification
             let changes = &content["params"]["contentChanges"];
             let text = changes[0]["text"].to_string();
 
-            let text_doc = Arc::new(TextDocument { text, version });
-            DOCUMENTS_STATE.set(uri.clone(), text_doc);
+            // let text_doc = Arc::new(TextDocument { text, version });
+            DOCUMENTS_STATE.set(uri.clone(), text, version);
 
             log_dbg!(NOTIF, "Change: textDocument: {}", text_document);
             return NotificationAction::SendDiagnostics(uri);
