@@ -30,58 +30,6 @@ fn text_get_line(text: &str, line_nr: usize) -> String {
     from_line
 }
 
-fn is_action_block(text: &str, line_nr: usize, char_nr: usize) -> bool {
-    let mut brace_count = 0;
-    for (i, line) in text.lines().enumerate() {
-        if i == line_nr {
-            let last_line = line.to_string();
-            for (i, c) in last_line.chars().enumerate() {
-                if i >= char_nr {
-                    break;
-                }
-                if c == '{' {
-                    brace_count += 1;
-                }
-                if c == '}' {
-                    brace_count -= 1;
-                }
-            }
-        } else {
-            brace_count += line.matches("{").count();
-            brace_count -= line.matches("}").count();
-        }
-    }
-
-    brace_count > 0
-}
-
-/*
-fn is_args(line_str: &str, char_nr: usize) -> bool {
-    let mut res = false;
-    if let Some(line_upto_char) = line_str.get(0..char_nr) {
-        res = line_upto_char.ends_with("args.");
-    }
-    res
-}
-*/
-
-fn is_argument(line_str: &str, char_nr: usize, args: &mut String) -> bool {
-    let mut res = false;
-    if let Some(line_upto_char) = line_str.get(0..char_nr) {
-        if let Some(last_word) = line_upto_char
-            .rsplit(|c| c == ' ' || c == '{' || c == '(')
-            .nth(0)
-        {
-            if last_word.starts_with("args.") {
-                args.push_str(last_word);
-                res = true;
-            }
-        }
-    }
-
-    res
-}
-
 fn btf_item_to_str(item: &ResolvedBtfItem) -> String {
     let mut s = item.type_vec.join(" ").to_string();
     s.push_str(" ");
@@ -238,7 +186,7 @@ fn encode_completion_for_action(
     line_nr: usize,
     char_nr: usize,
 ) -> Option<json::JsonValue> {
-    if !is_action_block(text, line_nr, char_nr) {
+    if !parser::is_action_block(text, line_nr, char_nr) {
         return None;
     }
     log_dbg!(COMPL, "Complete for action block");
@@ -252,7 +200,7 @@ fn encode_completion_for_action(
     }
 
     let mut this_argument = String::new();
-    if is_argument(line_str, char_nr, &mut this_argument) {
+    if parser::is_argument(line_str, char_nr, &mut this_argument) {
         log_dbg!(COMPL, "Complete for argument: {}", this_argument);
 
         let mut is_kfunc = false;
@@ -679,7 +627,7 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
                   },
             };
         }
-    } else if is_action_block(&text, line_nr, char_nr) {
+    } else if parser::is_action_block(&text, line_nr, char_nr) {
         let probe = find_probe_for_action(&text, line_nr);
         let probe_args = find_probe_args_by_command(&probe);
         log_dbg!(HOVER, "Probe {} with args:\n{}", probe, probe_args);
