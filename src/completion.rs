@@ -9,7 +9,6 @@ use crate::btf_mod::{
     btf_iterate_over_names_chain, btf_resolve_func, btf_setup_module, ResolvedBtfItem,
 };
 use crate::log_mod::{self, COMPL, HOVER};
-// use crate::DocumentsState;
 use crate::parser;
 use crate::DOCUMENTS_STATE;
 use crate::{log_dbg, log_vdbg};
@@ -20,21 +19,11 @@ static PROBES_ARGS_MAP: Lazy<Mutex<HashMap<String, String>>> =
 
 static MODULE_BTF_MAP: Lazy<Mutex<HashMap<String, Btf>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
-fn get_text(uri: &str) -> String {
-    if let Some(text_doc) = DOCUMENTS_STATE.get(uri) {
-        return text_doc.text.to_string();
-    };
-
-    "".to_string()
-}
-
-fn get_line(uri: &str, line_nr: usize) -> String {
+fn text_get_line(text: &str, line_nr: usize) -> String {
     let mut from_line = String::new();
-    if let Some(text_doc) = DOCUMENTS_STATE.get(uri) {
-        for (i, line) in text_doc.text.lines().enumerate() {
-            if i == line_nr {
-                from_line = line.to_string();
-            }
+    for (i, line) in text.lines().enumerate() {
+        if i == line_nr {
+            from_line = line.to_string();
         }
     }
 
@@ -538,24 +527,7 @@ fn encode_completion_for_empty_line(prefixes: &[&str]) -> json::JsonValue {
     data
 }
 
-pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
-    let uri = &content["params"]["textDocument"]["uri"].to_string();
-
-    let position = &content["params"]["position"];
-    let line_nr = position["line"].as_usize().unwrap();
-    let char_nr = position["character"].as_usize().unwrap();
-
-    let text = get_text(&uri);
-    let line_str = get_line(&uri, line_nr);
-
-    parser::ts_parse(&text);
-
-    log_dbg!(COMPL, "Complete for line: '{}'", line_str);
-
-    if let Some(data) = encode_completion_for_action(&text, &line_str, line_nr, char_nr) {
-        return data;
-    }
-
+fn encode_completion_for_probes(line_str: &str) -> json::JsonValue {
     let prefixes = [
         "iter",
         "hardware",
@@ -567,14 +539,50 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
         "kfunc",
         "kretfunc",
     ];
-    for prefix in prefixes.iter() {
-        if let Some(data) = encode_completion_for_line(prefix, &line_str) {
-            return data;
+
+    if !line_str.is_empty() {
+        for prefix in prefixes.iter() {
+            if let Some(data) = encode_completion_for_line(prefix, line_str) {
+                return data;
+            }
         }
     }
 
-    let data = encode_completion_for_empty_line(&prefixes[..]);
-    data
+    encode_completion_for_empty_line(&prefixes[..])
+}
+
+pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
+    let uri = &content["params"]["textDocument"]["uri"].to_string();
+
+    let text_doc = if let Some(doc) = DOCUMENTS_STATE.get(uri) {
+        doc
+    } else {
+        // empty results
+        return object! {
+            "result": {
+               "isIncomplete": false,
+               "items": json::JsonValue::new_array(),
+            }
+        };
+    };
+
+    let position = &content["params"]["position"];
+    let line_nr = position["line"].as_usize().unwrap();
+    let char_nr = position["character"].as_usize().unwrap();
+
+    if let Some(tree) = &text_doc.syntax_tree {
+        parser::ts_parse(tree);
+    }
+
+    let text = &text_doc.text;
+    let line_str = text_get_line(text, line_nr);
+    log_dbg!(COMPL, "Complete for line: '{}'", line_str);
+
+    if let Some(data) = encode_completion_for_action(text, &line_str, line_nr, char_nr) {
+        return data;
+    }
+
+    encode_completion_for_probes(&line_str)
 }
 
 pub fn encode_completion_resolve(content: json::JsonValue) -> json::JsonValue {
