@@ -751,4 +751,75 @@ mod tests {
         compare_btf_and_cmd("kfunc:vmlinux:acpi_register_gsi");
         compare_btf_and_cmd("kfunc:vmlinux:vfs_open");
     }
+
+    #[test]
+    fn test_completion_for_action() {
+        let uri = "file:///test.bt";
+        let text = "kprobe:do_sys_open { ";
+
+        DOCUMENTS_STATE.set(uri.to_string(), text.to_string(), 1);
+
+        let content = object! {
+            "params": {
+                "textDocument": {
+                    "uri": uri,
+                },
+                "position": {
+                    "line": 0,
+                    "character": text.len() - 1,
+                }
+            }
+        };
+
+        let result = encode_completion(content.clone());
+        assert!(result["result"]["items"].len() > 0);
+
+        // TODO other items than printf
+        let labels: Vec<_> = result["result"]["items"]
+            .members()
+            .map(|item| item["label"].to_string())
+            .collect();
+        assert!(labels.contains(&"printf".to_string()));
+    }
+
+    #[test]
+    fn test_completion_for_empty_line() {
+        let uri = "file:///empty.bt";
+        let text = "";
+        DOCUMENTS_STATE.set(uri.to_string(), text.to_string(), 1);
+
+        let content = object! {
+            "params": {
+                "textDocument": {
+                    "uri": uri,
+                },
+                "position": {
+                    "line": 0,
+                    "character": 0,
+                }
+            }
+        };
+
+        let result = encode_completion(content.clone());
+        assert!(result["result"]["items"].len() > 0);
+
+        let prefixes = [
+            "iter",
+            "hardware",
+            "tracepoint:",
+            "kprobe",
+            "kretprobe",
+            "software:",
+            "rawtracepoint",
+            "kfunc",
+            "kretfunc",
+        ];
+        let labels: Vec<_> = result["result"]["items"]
+            .members()
+            .map(|item| item["label"].to_string())
+            .collect();
+        for prefix in prefixes.iter() {
+            assert!(labels.contains(&prefix.to_string()));
+        }
+    }
 }
