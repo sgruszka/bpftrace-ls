@@ -822,4 +822,39 @@ mod tests {
         ];
         check_completion_resutls(result, prefixes);
     }
+
+    #[test]
+    fn test_completion_for_modules() {
+        let text = "kfunc:";
+        let json_content = completion_setup(text, 0, text.len() - 1);
+
+        let result = encode_completion(json_content);
+        assert!(result["result"]["items"].len() > 0);
+
+        // TODO other items than vmlinux? Use 'lsmod' ?
+        check_completion_resutls(result, vec!["vmlinux"]);
+    }
+
+    #[test]
+    fn test_completion_for_vfs_functions() {
+        let text = "kfunc:vmlinux:vfs_";
+        let json_content = completion_setup(text, 0, text.len() - 1);
+
+        let result = encode_completion(json_content);
+        assert!(result["result"]["items"].len() > 0);
+
+        let functions = vec![
+            "vfs_open",
+            "vfs_read",
+            "vfs_write",
+            "vfs_fstatat",
+            "vfs_mknod",
+            "vfs_llseek",
+            "vfs_readv",
+            "vfs_writev",
+            "vfs_truncate",
+            "vfs_unlink",
+        ];
+        check_completion_resutls(result, functions);
+    }
 }
