@@ -6,13 +6,14 @@ use crate::log_mod::{self, PARSE};
 #[derive(Debug, PartialEq)]
 pub enum SyntaxLocation {
     None, // TOOD
-    // Comment,
-    // ProbeProvider,
-    // ProbeModule,
-    // ProbeEvent,
+    SourceFile,
+    ActionBlock,
+    Comment,
+    ProbeProvider,
+    ProbeModule,
+    ProbeEvent,
+    Predicate,
     Action,
-    Probes,
-    // Predicate,
     //ArgsItem,
 }
 
@@ -30,11 +31,22 @@ pub fn find_location(tree: &Tree, line_nr: usize, char_nr: usize) -> SyntaxLocat
     // TODO! This might not work correctly when there are errors in syntax tree
 
     loop {
-        if node.kind() == "action" {
-            return SyntaxLocation::Action;
-        } else if node.kind() == "probes" {
-            return SyntaxLocation::Probes;
+        let loc = match node.kind() {
+            "source_file" => SyntaxLocation::SourceFile,
+            "block_comment" => SyntaxLocation::Comment,
+            "line_comment" => SyntaxLocation::Comment,
+            "action_block" => SyntaxLocation::ActionBlock,
+            "probe_provider" => SyntaxLocation::ProbeProvider,
+            "probe_module" => SyntaxLocation::ProbeModule,
+            "probe_event" => SyntaxLocation::ProbeEvent,
+            "action" => SyntaxLocation::Action,
+            _ => SyntaxLocation::None,
+        };
+
+        if loc != SyntaxLocation::None {
+            return loc;
         }
+
         node = if let Some(n) = node.parent() {
             n
         } else {
@@ -134,11 +146,18 @@ mod tests {
         assert_eq!(probe.field_name_for_child(0).unwrap(), "provider");
         assert_eq!(probe.field_name_for_child(2).unwrap(), "event");
     }
+
     #[test]
     fn test_find_location() {
-        let tree = setup_syntax_tree("kprobe:tcp_reset { }");
+        let tree = setup_syntax_tree("kprobe:tcp_reset { }\n /* this is block comment */\n");
 
         let ret = find_location(&tree, 0, 18);
         assert_eq!(ret, SyntaxLocation::Action);
+
+        let ret = find_location(&tree, 0, 0);
+        assert_eq!(ret, SyntaxLocation::ProbeProvider);
+
+        let ret = find_location(&tree, 1, 5);
+        assert_eq!(ret, SyntaxLocation::Comment);
     }
 }
