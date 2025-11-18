@@ -9,6 +9,7 @@ pub const COMPL: u32 = 1 << 2;
 pub const NOTIF: u32 = 1 << 3;
 pub const HOVER: u32 = 1 << 4;
 pub const BTFRE: u32 = 1 << 5;
+pub const PARSE: u32 = 1 << 6;
 
 #[macro_export()]
 macro_rules! log_err {

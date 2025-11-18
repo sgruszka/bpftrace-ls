@@ -1,13 +1,48 @@
-use tree_sitter::Tree;
+use tree_sitter::{Point, Tree};
 
 use crate::log_dbg;
-use crate::log_mod::{self, PROTO};
+use crate::log_mod::{self, PARSE};
 
-pub fn ts_parse(tree: &Tree) {
+#[derive(Debug, PartialEq)]
+pub enum SyntaxLocation {
+    None, // TOOD
+    // Comment,
+    // ProbeProvider,
+    // ProbeModule,
+    // ProbeEvent,
+    Action,
+    Probes,
+    // Predicate,
+    //ArgsItem,
+}
+
+pub fn find_location(tree: &Tree, line_nr: usize, char_nr: usize) -> SyntaxLocation {
     let root_node = tree.root_node();
-    assert_eq!(root_node.kind(), "source_file");
+    log_dbg!(PARSE, "Syntax tree\n {}", root_node.to_sexp());
 
-    log_dbg!(PROTO, "Syntax tree\n {}", root_node.to_sexp());
+    let pos = Point::new(line_nr, char_nr);
+    let mut node = if let Some(n) = root_node.descendant_for_point_range(pos, pos) {
+        n
+    } else {
+        return SyntaxLocation::None;
+    };
+
+    // TODO! This might not work correctly when there are errors in syntax tree
+
+    loop {
+        if node.kind() == "action" {
+            return SyntaxLocation::Action;
+        } else if node.kind() == "probes" {
+            return SyntaxLocation::Probes;
+        }
+        node = if let Some(n) = node.parent() {
+            n
+        } else {
+            break;
+        };
+    }
+
+    SyntaxLocation::None
 }
 
 pub fn is_action_block(text: &str, line_nr: usize, char_nr: usize) -> bool {
@@ -60,4 +95,50 @@ pub fn is_argument(line_str: &str, char_nr: usize, args: &mut String) -> bool {
     }
 
     res
+}
+
+#[cfg(test)]
+mod tests {
+    // use super::*;
+    use tree_sitter::{Parser, Tree};
+
+    use crate::parser::{find_location, SyntaxLocation};
+
+    fn setup_syntax_tree(source_code: &str) -> Tree {
+        let mut parser = Parser::new();
+        parser
+            .set_language(&tree_sitter_bpftrace::LANGUAGE.into())
+            .expect("Error loading bpftrace grammar");
+        let tree = parser.parse(source_code, None).unwrap();
+        tree
+    }
+
+    #[test]
+    fn test_tree_sitter() {
+        let tree = setup_syntax_tree("kprobe:tcp_reset { }");
+
+        let root_node = tree.root_node();
+        assert_eq!(root_node.kind(), "source_file");
+
+        let action_block = root_node.child(0).unwrap();
+        assert_eq!(action_block.kind(), "action_block");
+
+        let probes = action_block.child(0).unwrap();
+        let action = action_block.child(1).unwrap();
+        assert_eq!(probes.kind(), "probes");
+        assert_eq!(action.kind(), "action");
+
+        let probe = probes.child(0).unwrap();
+        assert_eq!(probe.kind(), "probe");
+        assert_eq!(probe.child_count(), 3);
+        assert_eq!(probe.field_name_for_child(0).unwrap(), "provider");
+        assert_eq!(probe.field_name_for_child(2).unwrap(), "event");
+    }
+    #[test]
+    fn test_find_location() {
+        let tree = setup_syntax_tree("kprobe:tcp_reset { }");
+
+        let ret = find_location(&tree, 0, 18);
+        assert_eq!(ret, SyntaxLocation::Action);
+    }
 }

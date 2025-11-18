@@ -519,7 +519,7 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     let char_nr = position["character"].as_usize().unwrap();
 
     if let Some(tree) = &text_doc.syntax_tree {
-        parser::ts_parse(tree);
+        let _loc = parser::find_location(tree, line_nr, char_nr);
     }
 
     let text = &text_doc.text;
