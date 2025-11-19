@@ -9,7 +9,7 @@ use crate::btf_mod::{
     btf_iterate_over_names_chain, btf_resolve_func, btf_setup_module, ResolvedBtfItem,
 };
 use crate::log_mod::{self, COMPL, HOVER};
-use crate::parser;
+use crate::parser::{self, SyntaxLocation};
 use crate::DOCUMENTS_STATE;
 use crate::{log_dbg, log_vdbg};
 use btf_rs::Btf;
@@ -517,17 +517,17 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     let position = &content["params"]["position"];
     let line_nr = position["line"].as_usize().unwrap();
     let char_nr = position["character"].as_usize().unwrap();
-
-    if let Some(tree) = &text_doc.syntax_tree {
-        let _loc = parser::find_location(tree, line_nr, char_nr);
-    }
-
     let text = &text_doc.text;
     let line_str = text_get_line(text, line_nr);
     log_dbg!(COMPL, "Complete for line: '{}'", line_str);
 
-    if let Some(data) = encode_completion_for_action(text, &line_str, line_nr, char_nr) {
-        return data;
+    if let Some(tree) = &text_doc.syntax_tree {
+        let loc = parser::find_syntax_location(text, tree, line_nr, char_nr);
+        if loc == SyntaxLocation::Action {
+            if let Some(data) = encode_completion_for_action(text, &line_str, line_nr, char_nr) {
+                return data;
+            }
+        }
     }
 
     encode_completion_for_probes(&line_str)
