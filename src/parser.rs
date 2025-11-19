@@ -3,18 +3,15 @@ use tree_sitter::{Node, Point, Query, QueryCursor, StreamingIterator, Tree};
 use crate::log_dbg;
 use crate::log_mod::{self, PARSE};
 
+// Syntax tree nodes we are interested in in context of completion
 #[derive(Debug, PartialEq)]
 pub enum SyntaxLocation {
-    None, // TOOD
     SourceFile,
-    ActionBlock,
     Comment,
-    ProbeProvider,
-    ProbeModule,
-    ProbeEvent,
+    Probes,
     Predicate,
     Action,
-    //ArgsItem,
+    ArgsItem,
 }
 
 #[derive(PartialEq)]
@@ -53,6 +50,7 @@ pub fn find_syntax_location(
     let query_str = r#"
     [
         (probes) @probes
+        (predicate) @predicate
         (action) @action
         (block_comment) @block_comment
         (line_comment) @line_comment
@@ -66,7 +64,7 @@ pub fn find_syntax_location(
     let mut query_cursor = QueryCursor::new();
     let mut matches = query_cursor.matches(&query, tree.root_node(), text.as_bytes());
 
-    let mut ret = SyntaxLocation::None;
+    let mut ret = SyntaxLocation::SourceFile;
 
     while let Some(m) = matches.next() {
         for cap in m.captures {
@@ -90,15 +88,13 @@ pub fn find_syntax_location(
 
             if pos == Position::WITHIN {
                 ret = match node.kind() {
-                    // "source_file" => SyntaxLocation::SourceFile,
                     "block_comment" => SyntaxLocation::Comment,
                     "line_comment" => SyntaxLocation::Comment,
-                    "action_block" => SyntaxLocation::ActionBlock,
-                    "probe_provider" => SyntaxLocation::ProbeProvider,
-                    "probe_module" => SyntaxLocation::ProbeModule,
-                    "probe_event" => SyntaxLocation::ProbeEvent,
+                    "probes" => SyntaxLocation::Probes,
+                    "predicate" => SyntaxLocation::Predicate,
                     "action" => SyntaxLocation::Action,
-                    _ => SyntaxLocation::None,
+                    "args_item" => SyntaxLocation::ArgsItem,
+                    _ => SyntaxLocation::SourceFile,
                 };
                 break;
             }
@@ -116,7 +112,7 @@ pub fn find_location(tree: &Tree, line_nr: usize, char_nr: usize) -> SyntaxLocat
     let mut node = if let Some(n) = root_node.descendant_for_point_range(pos, pos) {
         n
     } else {
-        return SyntaxLocation::None;
+        return SyntaxLocation::SourceFile;
     };
 
     // TODO! This might not work correctly when there are errors in syntax tree
@@ -126,15 +122,14 @@ pub fn find_location(tree: &Tree, line_nr: usize, char_nr: usize) -> SyntaxLocat
             "source_file" => SyntaxLocation::SourceFile,
             "block_comment" => SyntaxLocation::Comment,
             "line_comment" => SyntaxLocation::Comment,
-            "action_block" => SyntaxLocation::ActionBlock,
-            "probe_provider" => SyntaxLocation::ProbeProvider,
-            "probe_module" => SyntaxLocation::ProbeModule,
-            "probe_event" => SyntaxLocation::ProbeEvent,
+            "probes" => SyntaxLocation::Probes,
+            "predicate" => SyntaxLocation::Predicate,
             "action" => SyntaxLocation::Action,
-            _ => SyntaxLocation::None,
+            "args_item" => SyntaxLocation::ArgsItem,
+            _ => SyntaxLocation::SourceFile,
         };
 
-        if loc != SyntaxLocation::None {
+        if loc != SyntaxLocation::SourceFile {
             return loc;
         }
 
@@ -145,7 +140,7 @@ pub fn find_location(tree: &Tree, line_nr: usize, char_nr: usize) -> SyntaxLocat
         };
     }
 
-    SyntaxLocation::None
+    SyntaxLocation::SourceFile
 }
 
 pub fn is_action_block(text: &str, line_nr: usize, char_nr: usize) -> bool {
@@ -244,18 +239,40 @@ mod tests {
         assert_eq!(ret, SyntaxLocation::Action);
 
         let ret = find_location(&tree, 0, 0);
-        assert_eq!(ret, SyntaxLocation::ProbeProvider);
+        assert_eq!(ret, SyntaxLocation::Probes);
 
         let ret = find_location(&tree, 1, 5);
         assert_eq!(ret, SyntaxLocation::Comment);
     }
 
     #[test]
-    fn test_find_syntax_location() {
+    fn test_block_comment_syntax_find() {
         let text = "kprobe:tcp_reset { }\n /* this is block comment */\n";
         let tree = setup_syntax_tree(text);
 
         let ret = find_syntax_location(text, &tree, 1, 5);
         assert_eq!(ret, SyntaxLocation::Comment);
+    }
+
+    #[test]
+    fn test_action_block_syntax_find() {
+        let text = r#"
+tracepoint:syscalls:sys_enter_open,
+tracepoint:syscalls:sys_enter_openat {
+  printf("%-6d %-16s %s\n", pid, comm, str(args.filename));
+}
+        "#;
+        let tree = setup_syntax_tree(text);
+
+        let ret = find_syntax_location(text, &tree, 1, 0);
+        assert_eq!(ret, SyntaxLocation::Probes);
+        let ret = find_syntax_location(text, &tree, 2, 0);
+        assert_eq!(ret, SyntaxLocation::Probes);
+
+        let ret = find_syntax_location(text, &tree, 3, 0);
+        assert_eq!(ret, SyntaxLocation::Action);
+
+        let ret = find_syntax_location(text, &tree, 3, 55);
+        assert_eq!(ret, SyntaxLocation::ArgsItem);
     }
 }
