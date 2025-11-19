@@ -1,4 +1,4 @@
-use tree_sitter::{Point, Tree};
+use tree_sitter::{Node, Point, Query, QueryCursor, StreamingIterator, Tree};
 
 use crate::log_dbg;
 use crate::log_mod::{self, PARSE};
@@ -15,6 +15,97 @@ pub enum SyntaxLocation {
     Predicate,
     Action,
     //ArgsItem,
+}
+
+#[derive(PartialEq)]
+enum Position {
+    BEFORE,
+    WITHIN,
+    AFTER,
+}
+
+fn postition_relative_to_node(node: &Node, line_nr: usize, char_nr: usize) -> Position {
+    let start = node.start_position();
+    let end = node.end_position();
+
+    if line_nr < start.row {
+        return Position::BEFORE;
+    }
+    if line_nr > end.row {
+        return Position::AFTER;
+    }
+    if line_nr == start.row && char_nr < start.column {
+        return Position::BEFORE;
+    }
+    if line_nr == end.row && char_nr >= end.column {
+        return Position::AFTER;
+    }
+
+    Position::WITHIN
+}
+
+pub fn find_syntax_location(
+    text: &str,
+    tree: &Tree,
+    line_nr: usize,
+    char_nr: usize,
+) -> SyntaxLocation {
+    let query_str = r#"
+    [
+        (probes) @probes
+        (action) @action
+        (block_comment) @block_comment
+        (line_comment) @line_comment
+        (args_item) @args_item
+    ]
+    "#;
+
+    let query = Query::new(&tree_sitter_bpftrace::LANGUAGE.into(), query_str)
+        .expect("Error creating query"); // TODO
+
+    let mut query_cursor = QueryCursor::new();
+    let mut matches = query_cursor.matches(&query, tree.root_node(), text.as_bytes());
+
+    let mut ret = SyntaxLocation::None;
+
+    while let Some(m) = matches.next() {
+        for cap in m.captures {
+            let node = cap.node;
+            println!("{}", node.kind());
+
+            let start_point = node.start_position();
+            let end_point = node.end_position();
+            println!(
+                "    Start: Line {}, Column {}",
+                start_point.row + 1,
+                start_point.column + 1
+            );
+            println!(
+                "    End:   Line {}, Column {}",
+                end_point.row + 1,
+                end_point.column + 1
+            );
+
+            let pos = postition_relative_to_node(&node, line_nr, char_nr);
+
+            if pos == Position::WITHIN {
+                ret = match node.kind() {
+                    // "source_file" => SyntaxLocation::SourceFile,
+                    "block_comment" => SyntaxLocation::Comment,
+                    "line_comment" => SyntaxLocation::Comment,
+                    "action_block" => SyntaxLocation::ActionBlock,
+                    "probe_provider" => SyntaxLocation::ProbeProvider,
+                    "probe_module" => SyntaxLocation::ProbeModule,
+                    "probe_event" => SyntaxLocation::ProbeEvent,
+                    "action" => SyntaxLocation::Action,
+                    _ => SyntaxLocation::None,
+                };
+                break;
+            }
+        }
+    }
+
+    ret
 }
 
 pub fn find_location(tree: &Tree, line_nr: usize, char_nr: usize) -> SyntaxLocation {
@@ -111,10 +202,8 @@ pub fn is_argument(line_str: &str, char_nr: usize, args: &mut String) -> bool {
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
+    use super::*;
     use tree_sitter::{Parser, Tree};
-
-    use crate::parser::{find_location, SyntaxLocation};
 
     fn setup_syntax_tree(source_code: &str) -> Tree {
         let mut parser = Parser::new();
@@ -158,6 +247,15 @@ mod tests {
         assert_eq!(ret, SyntaxLocation::ProbeProvider);
 
         let ret = find_location(&tree, 1, 5);
+        assert_eq!(ret, SyntaxLocation::Comment);
+    }
+
+    #[test]
+    fn test_find_syntax_location() {
+        let text = "kprobe:tcp_reset { }\n /* this is block comment */\n";
+        let tree = setup_syntax_tree(text);
+
+        let ret = find_syntax_location(text, &tree, 1, 5);
         assert_eq!(ret, SyntaxLocation::Comment);
     }
 }
