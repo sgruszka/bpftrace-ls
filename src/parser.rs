@@ -41,6 +41,28 @@ fn postition_relative_to_node(node: &Node, line_nr: usize, char_nr: usize) -> Po
     Position::WITHIN
 }
 
+fn postion_before_next_sibling(node: &Node, line_nr: usize, char_nr: usize) -> bool {
+    if let Some(next_sibling) = node.next_sibling() {
+        if postition_relative_to_node(&next_sibling, line_nr, char_nr) == Position::BEFORE {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn node_to_syntax_location(node: &Node) -> SyntaxLocation {
+    match node.kind() {
+        "block_comment" => SyntaxLocation::Comment,
+        "line_comment" => SyntaxLocation::Comment,
+        "probes" => SyntaxLocation::Probes,
+        "predicate" => SyntaxLocation::Predicate,
+        "action" => SyntaxLocation::Action,
+        "args_item" => SyntaxLocation::ArgsItem,
+        _ => SyntaxLocation::SourceFile,
+    }
+}
+
 pub fn find_syntax_location(
     text: &str,
     tree: &Tree,
@@ -65,38 +87,35 @@ pub fn find_syntax_location(
     let mut matches = query_cursor.matches(&query, tree.root_node(), text.as_bytes());
 
     let mut ret = SyntaxLocation::SourceFile;
+    let mut current_node: Option<Node> = None;
 
     while let Some(m) = matches.next() {
         for cap in m.captures {
             let node = cap.node;
-            println!("{}", node.kind());
-
-            let start_point = node.start_position();
-            let end_point = node.end_position();
-            println!(
-                "    Start: Line {}, Column {}",
-                start_point.row + 1,
-                start_point.column + 1
-            );
-            println!(
-                "    End:   Line {}, Column {}",
-                end_point.row + 1,
-                end_point.column + 1
-            );
 
             let pos = postition_relative_to_node(&node, line_nr, char_nr);
 
             if pos == Position::WITHIN {
-                ret = match node.kind() {
-                    "block_comment" => SyntaxLocation::Comment,
-                    "line_comment" => SyntaxLocation::Comment,
-                    "probes" => SyntaxLocation::Probes,
-                    "predicate" => SyntaxLocation::Predicate,
-                    "action" => SyntaxLocation::Action,
-                    "args_item" => SyntaxLocation::ArgsItem,
-                    _ => SyntaxLocation::SourceFile,
-                };
+                ret = node_to_syntax_location(&node);
+            } else if pos == Position::BEFORE {
                 break;
+            }
+
+            current_node = Some(node);
+        }
+    }
+
+    if ret != SyntaxLocation::SourceFile || current_node.is_none() {
+        return ret;
+    }
+
+    let node = current_node.unwrap();
+    if (node.next_sibling().is_none() || postion_before_next_sibling(&node, line_nr, char_nr))
+        && node.has_error()
+    {
+        if let Some(right_child) = node.child(node.child_count() - 1) {
+            if right_child.is_missing() {
+                return node_to_syntax_location(&node);
             }
         }
     }
@@ -274,5 +293,14 @@ tracepoint:syscalls:sys_enter_openat {
 
         let ret = find_syntax_location(text, &tree, 3, 55);
         assert_eq!(ret, SyntaxLocation::ArgsItem);
+    }
+
+    #[test]
+    fn test_unfinished_action_syntax_find() {
+        let text = "kprobe:tcp_reset {  ";
+        let tree = setup_syntax_tree(text);
+
+        let ret = find_syntax_location(text, &tree, 0, text.len() - 1);
+        assert_eq!(ret, SyntaxLocation::Action);
     }
 }
