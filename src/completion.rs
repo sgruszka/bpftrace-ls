@@ -502,16 +502,17 @@ fn encode_completion_for_probes(line_str: &str) -> json::JsonValue {
 pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     let uri = &content["params"]["textDocument"]["uri"].to_string();
 
+    let emtpy_results = object! {
+        "result": {
+           "isIncomplete": false,
+           "items": json::JsonValue::new_array(),
+        }
+    };
+
     let text_doc = if let Some(doc) = DOCUMENTS_STATE.get(uri) {
         doc
     } else {
-        // empty results
-        return object! {
-            "result": {
-               "isIncomplete": false,
-               "items": json::JsonValue::new_array(),
-            }
-        };
+        return emtpy_results;
     };
 
     let position = &content["params"]["position"];
@@ -521,17 +522,21 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     let line_str = text_get_line(text, line_nr);
     log_dbg!(COMPL, "Complete for line: '{}'", line_str);
 
+    let mut loc = SyntaxLocation::SourceFile;
     if let Some(tree) = &text_doc.syntax_tree {
-        let loc = parser::find_syntax_location(text, tree, line_nr, char_nr);
+        loc = parser::find_syntax_location(text, tree, line_nr, char_nr);
         log_dbg!(COMPL, "Found syntax location: {:?}", loc);
-        if loc == SyntaxLocation::Action || loc == SyntaxLocation::ArgsItem {
-            if let Some(data) = encode_completion_for_action(text, &line_str, line_nr, char_nr) {
-                return data;
-            }
-        }
     }
 
-    encode_completion_for_probes(&line_str)
+    if loc != SyntaxLocation::Comment {
+        if let Some(data) = encode_completion_for_action(text, &line_str, line_nr, char_nr) {
+            return data;
+        }
+
+        return encode_completion_for_probes(&line_str);
+    }
+
+    emtpy_results
 }
 
 pub fn encode_completion_resolve(content: json::JsonValue) -> json::JsonValue {
