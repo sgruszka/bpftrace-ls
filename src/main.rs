@@ -55,8 +55,7 @@ impl DocumentsState {
     fn set(&self, uri: String, text: String, version: u64) {
         let mut write_guard = self.0.write().unwrap();
 
-        // TODO: refactor to avoid text.clone()
-        let syntax_tree = write_guard.parser.parse(text.clone().as_bytes(), None);
+        let syntax_tree = write_guard.parser.parse(text.as_bytes(), None);
 
         let text_doc = Arc::new(TextDocument {
             text,
