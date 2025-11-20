@@ -523,7 +523,8 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
 
     if let Some(tree) = &text_doc.syntax_tree {
         let loc = parser::find_syntax_location(text, tree, line_nr, char_nr);
-        if loc == SyntaxLocation::Action {
+        log_dbg!(COMPL, "Found syntax location: {:?}", loc);
+        if loc == SyntaxLocation::Action || loc == SyntaxLocation::ArgsItem {
             if let Some(data) = encode_completion_for_action(text, &line_str, line_nr, char_nr) {
                 return data;
             }
