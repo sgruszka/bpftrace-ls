@@ -303,4 +303,16 @@ tracepoint:syscalls:sys_enter_openat {
         let ret = find_syntax_location(text, &tree, 0, text.len() - 1);
         assert_eq!(ret, SyntaxLocation::Action);
     }
+
+    #[test]
+    fn test_unfinished_args_item_syntax_find() {
+        // TODO:
+        // let text = r#"kfunc:vmlinux:posix_timer_fn { printf("%d\n", args.timer->"#;
+
+        let text = r#"kfunc:vmlinux:posix_timer_fn { printf("%d\n", args.timer-> }"#;
+        let tree = setup_syntax_tree(text);
+
+        let ret = find_syntax_location(text, &tree, 0, text.len() - 5);
+        assert_eq!(ret, SyntaxLocation::ArgsItem);
+    }
 }
