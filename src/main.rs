@@ -6,7 +6,6 @@ use tree_sitter_bpftrace;
 use once_cell::sync::Lazy;
 use std::{
     collections::HashMap,
-    hash::Hash,
     io::{self, Read, Write},
     process::Command,
     sync::{mpsc, Arc, RwLock},
