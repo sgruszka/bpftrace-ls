@@ -734,7 +734,8 @@ mod tests {
         for val in values.iter() {
             assert!(
                 labels.contains(&val.to_string()),
-                "'{val}' missed in completion result"
+                "'{val}' missed in completion results: {:?}",
+                labels
             );
         }
     }
@@ -748,7 +749,7 @@ mod tests {
     }
 
     #[test]
-    fn test_completion_for_action() {
+    fn test_action_completion_for_do_sys_open() {
         let text = "kprobe:do_sys_open { ";
         let json_content = completion_setup(text, 0, text.len() - 1);
 
@@ -760,7 +761,7 @@ mod tests {
     }
 
     #[test]
-    fn test_completion_for_empty_line() {
+    fn test_probes_completion_for_empty_line() {
         let json_content = completion_setup("", 0, 0);
 
         let result = encode_completion(json_content);
@@ -781,7 +782,7 @@ mod tests {
     }
 
     #[test]
-    fn test_completion_for_modules() {
+    fn test_probes_completion_for_modules() {
         let text = "kfunc:";
         let json_content = completion_setup(text, 0, text.len() - 1);
 
@@ -793,7 +794,7 @@ mod tests {
     }
 
     #[test]
-    fn test_completion_for_vfs_functions() {
+    fn test_probes_completion_for_vfs_functions() {
         let text = "kfunc:vmlinux:vfs_";
         let json_content = completion_setup(text, 0, text.len() - 1);
 
@@ -813,5 +814,19 @@ mod tests {
             "vfs_unlink",
         ];
         check_completion_resutls(result, functions);
+    }
+
+    #[test]
+    fn test_args_completion_for_hrtimer_base() {
+        let text = r#"kfunc:vmlinux:posix_timer_fn { printf("%d\n", args.timer->base-> ); }"#;
+        let json_content = completion_setup(text, 0, text.len() - 5);
+
+        let result = encode_completion(json_content);
+        assert!(result["result"]["items"].len() > 0);
+
+        let fields = vec![
+            "cpu_base", "index", "clockid", "seq", "running", "active", "get_time", "offset",
+        ];
+        check_completion_resutls(result, fields);
     }
 }
