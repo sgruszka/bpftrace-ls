@@ -162,6 +162,7 @@ pub fn find_location(tree: &Tree, line_nr: usize, char_nr: usize) -> SyntaxLocat
     SyntaxLocation::SourceFile
 }
 
+// TODO we should not count for braces in comments :-)
 pub fn is_action_block(text: &str, line_nr: usize, char_nr: usize) -> bool {
     let mut brace_count = 0;
     for (i, line) in text.lines().enumerate() {
@@ -178,6 +179,7 @@ pub fn is_action_block(text: &str, line_nr: usize, char_nr: usize) -> bool {
                     brace_count -= 1;
                 }
             }
+            break;
         } else {
             brace_count += line.matches("{").count();
             brace_count -= line.matches("}").count();
