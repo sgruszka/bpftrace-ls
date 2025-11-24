@@ -11,7 +11,6 @@ pub enum SyntaxLocation {
     Probes,
     Predicate,
     Action,
-    ArgsItem,
 }
 
 #[derive(PartialEq)]
@@ -58,7 +57,6 @@ fn node_to_syntax_location(node: &Node) -> SyntaxLocation {
         "probes" => SyntaxLocation::Probes,
         "predicate" => SyntaxLocation::Predicate,
         "action" => SyntaxLocation::Action,
-        "args_item" => SyntaxLocation::ArgsItem,
         _ => SyntaxLocation::SourceFile,
     }
 }
@@ -76,7 +74,6 @@ pub fn find_syntax_location(
         (action) @action
         (block_comment) @block_comment
         (line_comment) @line_comment
-        (args_item) @args_item
     ]
     "#;
 
@@ -144,7 +141,6 @@ pub fn find_location(tree: &Tree, line_nr: usize, char_nr: usize) -> SyntaxLocat
             "probes" => SyntaxLocation::Probes,
             "predicate" => SyntaxLocation::Predicate,
             "action" => SyntaxLocation::Action,
-            "args_item" => SyntaxLocation::ArgsItem,
             _ => SyntaxLocation::SourceFile,
         };
 
@@ -292,9 +288,6 @@ tracepoint:syscalls:sys_enter_openat {
 
         let ret = find_syntax_location(text, &tree, 3, 0);
         assert_eq!(ret, SyntaxLocation::Action);
-
-        let ret = find_syntax_location(text, &tree, 3, 55);
-        assert_eq!(ret, SyntaxLocation::ArgsItem);
     }
 
     #[test]
@@ -315,6 +308,6 @@ tracepoint:syscalls:sys_enter_openat {
         let tree = setup_syntax_tree(text);
 
         let ret = find_syntax_location(text, &tree, 0, text.len() - 5);
-        assert_eq!(ret, SyntaxLocation::ArgsItem);
+        assert_eq!(ret, SyntaxLocation::Action);
     }
 }
