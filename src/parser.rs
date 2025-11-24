@@ -120,6 +120,25 @@ pub fn find_syntax_location<'t>(
     (SyntaxLocation::SourceFile, tree.root_node())
 }
 
+pub fn find_probe_for_action(action: &Node, text: &str) -> String {
+    assert_eq!(action.kind(), "action");
+
+    // TODO remove unwrap and add checks in case of broken tree
+    let action_block = action.parent().unwrap();
+    assert_eq!(action_block.kind(), "action_block");
+
+    let probes = action_block.child(0).unwrap();
+    assert_eq!(probes.kind(), "probes");
+
+    // TODO handle probe list and wildcard's
+    let probe = probes.child(0).unwrap();
+
+    let probe_text = probe.utf8_text(text.as_bytes());
+
+    //"".to_string()
+    probe_text.unwrap().to_string()
+}
+
 pub fn find_location(tree: &Tree, line_nr: usize, char_nr: usize) -> SyntaxLocation {
     let root_node = tree.root_node();
     log_dbg!(PARSE, "Syntax tree\n {}", root_node.to_sexp());
@@ -318,5 +337,37 @@ tracepoint:syscalls:sys_enter_openat {
 
         let ret = find_syntax_location(text, &tree, 1, 0);
         assert_eq!(ret.0, SyntaxLocation::Comment);
+    }
+
+    #[test]
+    fn test_oneline_probe_for_action() {
+        let text = r#"kretfunc:mac80211:ieee80211_deauth { print(args) }"#;
+        let tree = setup_syntax_tree(text);
+
+        let (loc, action) = find_syntax_location(text, &tree, 0, text.len() - 2);
+        assert_eq!(loc, SyntaxLocation::Action);
+        assert_eq!(action.kind(), "action");
+
+        let probe = find_probe_for_action(&action, text);
+        assert_eq!(probe, "kretfunc:mac80211:ieee80211_deauth");
+    }
+
+    #[test]
+    fn test_multiline_probe_for_action() {
+        let text = r#"
+kfunc:vmlinux:posix_timer_fn {
+    printf("%d \n", args.timer->base->cpu_base->in_hrtirq);
+    // Commented line
+    printf("%p\n", args.timer->is_hard);
+}
+        "#;
+        let tree = setup_syntax_tree(text);
+
+        let (loc, action) = find_syntax_location(text, &tree, 3, 0);
+        assert_eq!(loc, SyntaxLocation::Action);
+        assert_eq!(action.kind(), "action");
+
+        let probe = find_probe_for_action(&action, text);
+        assert_eq!(probe, "kfunc:vmlinux:posix_timer_fn");
     }
 }
