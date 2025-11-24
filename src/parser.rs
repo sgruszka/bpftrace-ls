@@ -300,14 +300,23 @@ tracepoint:syscalls:sys_enter_openat {
     }
 
     #[test]
-    fn test_unfinished_args_item_syntax_find() {
+    fn test_block_comment_in_action_syntax_find() {
         // TODO:
         // let text = r#"kfunc:vmlinux:posix_timer_fn { printf("%d\n", args.timer->"#;
 
-        let text = r#"kfunc:vmlinux:posix_timer_fn { printf("%d\n", args.timer-> }"#;
+        let text = r#"kfunc:vmlinux:posix_timer_fn { printf("%d\n", /* args.timer->*/}"#;
         let tree = setup_syntax_tree(text);
 
         let ret = find_syntax_location(text, &tree, 0, text.len() - 5);
-        assert_eq!(ret, SyntaxLocation::Action);
+        assert_eq!(ret, SyntaxLocation::Comment);
+    }
+
+    #[test]
+    fn test_line_comment_in_action_syntax_find() {
+        let text = "kfunc:vmlinux:posix_timer_fn {\n// Line comment\n}";
+        let tree = setup_syntax_tree(text);
+
+        let ret = find_syntax_location(text, &tree, 1, 0);
+        assert_eq!(ret, SyntaxLocation::Comment);
     }
 }
