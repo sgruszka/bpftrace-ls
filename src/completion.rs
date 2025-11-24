@@ -524,7 +524,7 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
 
     let mut loc = SyntaxLocation::SourceFile;
     if let Some(tree) = &text_doc.syntax_tree {
-        loc = parser::find_syntax_location(text, tree, line_nr, char_nr);
+        (loc, _) = parser::find_syntax_location(text, tree, line_nr, char_nr);
         log_dbg!(COMPL, "Found syntax location: {:?}", loc);
     }
 

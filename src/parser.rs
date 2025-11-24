@@ -61,12 +61,12 @@ fn node_to_syntax_location(node: &Node) -> SyntaxLocation {
     }
 }
 
-pub fn find_syntax_location(
+pub fn find_syntax_location<'t>(
     text: &str,
-    tree: &Tree,
+    tree: &'t Tree,
     line_nr: usize,
     char_nr: usize,
-) -> SyntaxLocation {
+) -> (SyntaxLocation, Node<'t>) {
     let query_str = r#"
     [
         (probes) @probes
@@ -83,7 +83,7 @@ pub fn find_syntax_location(
     let mut query_cursor = QueryCursor::new();
     let mut matches = query_cursor.matches(&query, tree.root_node(), text.as_bytes());
 
-    let mut ret = SyntaxLocation::SourceFile;
+    let mut ret = (SyntaxLocation::SourceFile, tree.root_node());
     let mut current_node: Option<Node> = None;
 
     while let Some(m) = matches.next() {
@@ -93,7 +93,7 @@ pub fn find_syntax_location(
             let pos = postition_relative_to_node(&node, line_nr, char_nr);
 
             if pos == Position::WITHIN {
-                ret = node_to_syntax_location(&node);
+                ret = (node_to_syntax_location(&node), node);
             } else if pos == Position::BEFORE {
                 break;
             }
@@ -102,7 +102,7 @@ pub fn find_syntax_location(
         }
     }
 
-    if ret != SyntaxLocation::SourceFile || current_node.is_none() {
+    if ret.0 != SyntaxLocation::SourceFile || current_node.is_none() {
         return ret;
     }
 
@@ -112,12 +112,12 @@ pub fn find_syntax_location(
     {
         if let Some(right_child) = node.child(node.child_count() - 1) {
             if right_child.is_missing() {
-                return node_to_syntax_location(&node);
+                return (node_to_syntax_location(&node), node);
             }
         }
     }
 
-    ret
+    (SyntaxLocation::SourceFile, tree.root_node())
 }
 
 pub fn find_location(tree: &Tree, line_nr: usize, char_nr: usize) -> SyntaxLocation {
@@ -268,7 +268,7 @@ mod tests {
         let tree = setup_syntax_tree(text);
 
         let ret = find_syntax_location(text, &tree, 1, 5);
-        assert_eq!(ret, SyntaxLocation::Comment);
+        assert_eq!(ret.0, SyntaxLocation::Comment);
     }
 
     #[test]
@@ -282,12 +282,12 @@ tracepoint:syscalls:sys_enter_openat {
         let tree = setup_syntax_tree(text);
 
         let ret = find_syntax_location(text, &tree, 1, 0);
-        assert_eq!(ret, SyntaxLocation::Probes);
+        assert_eq!(ret.0, SyntaxLocation::Probes);
         let ret = find_syntax_location(text, &tree, 2, 0);
-        assert_eq!(ret, SyntaxLocation::Probes);
+        assert_eq!(ret.0, SyntaxLocation::Probes);
 
         let ret = find_syntax_location(text, &tree, 3, 0);
-        assert_eq!(ret, SyntaxLocation::Action);
+        assert_eq!(ret.0, SyntaxLocation::Action);
     }
 
     #[test]
@@ -296,7 +296,7 @@ tracepoint:syscalls:sys_enter_openat {
         let tree = setup_syntax_tree(text);
 
         let ret = find_syntax_location(text, &tree, 0, text.len() - 1);
-        assert_eq!(ret, SyntaxLocation::Action);
+        assert_eq!(ret.0, SyntaxLocation::Action);
     }
 
     #[test]
@@ -308,7 +308,7 @@ tracepoint:syscalls:sys_enter_openat {
         let tree = setup_syntax_tree(text);
 
         let ret = find_syntax_location(text, &tree, 0, text.len() - 5);
-        assert_eq!(ret, SyntaxLocation::Comment);
+        assert_eq!(ret.0, SyntaxLocation::Comment);
     }
 
     #[test]
@@ -317,6 +317,6 @@ tracepoint:syscalls:sys_enter_openat {
         let tree = setup_syntax_tree(text);
 
         let ret = find_syntax_location(text, &tree, 1, 0);
-        assert_eq!(ret, SyntaxLocation::Comment);
+        assert_eq!(ret.0, SyntaxLocation::Comment);
     }
 }
