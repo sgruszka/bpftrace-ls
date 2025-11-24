@@ -333,6 +333,37 @@ fn handle_multi_line_error(tokens: &Vec<&str>) -> json::JsonValue {
     diag
 }
 
+// Parse definitions errors:
+// definitions.h:10:18: error: expected ';' at end of declaration list
+fn handle_definitions_error(tokens: &Vec<&str>) -> json::JsonValue {
+    let mut line_nr = tokens[1].parse::<usize>().unwrap();
+    if line_nr > 1 {
+        line_nr -= 1;
+    }
+
+    let end_char_nr = tokens[2].parse::<usize>().unwrap();
+    let start_char_nr = if end_char_nr > 0 {
+        end_char_nr - 1
+    } else {
+        end_char_nr
+    };
+
+    let msg = if tokens.len() > 4 {
+        tokens[4..].join(":")
+    } else {
+        "".to_string()
+    };
+
+    let diag = object! {
+        "range": { "start": { "line": line_nr, "character": start_char_nr}, "end": {"line": line_nr, "character": end_char_nr, }, },
+        "severity": 1,
+        // "source": "bpftrace -d",
+        "message": format!("ERROR:{}", msg),
+    };
+
+    diag
+}
+
 fn do_diagnotics(text: &str) -> json::JsonValue {
     let mut diagnostics = json::JsonValue::new_array();
 
@@ -357,6 +388,9 @@ fn do_diagnotics(text: &str) -> json::JsonValue {
                     let diag = handle_multi_line_error(&tokens);
                     let _ = diagnostics.push(diag);
                 }
+            } else if tokens[0] == "definitions.h" && tokens.len() >= 3 {
+                let diag = handle_definitions_error(&tokens);
+                let _ = diagnostics.push(diag);
             }
         }
     }
@@ -630,7 +664,7 @@ fn thread_diagnostics(
                     if text_doc.version != diag_req.version {
                         log_dbg!(
                             DIAGN,
-                            "Skip diagnostics for old version {}, now version is {}",
+                            "Skip diagnostics for old version {}, version is {}",
                             diag_req.version,
                             text_doc.version
                         );
