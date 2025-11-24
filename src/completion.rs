@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::process::Command;
 use std::str::Lines;
 use std::sync::Mutex;
+use tree_sitter::Node;
 
 use crate::btf_mod::{
     btf_iterate_over_names_chain, btf_resolve_func, btf_setup_module, ResolvedBtfItem,
@@ -182,19 +183,16 @@ fn find_kfunc_args_by_btf(kfunc: &str) -> Option<(String, ResolvedBtfItem)> {
 
 fn encode_completion_for_action(
     text: &str,
+    node: &Node,
     line_str: &str,
-    line_nr: usize,
     char_nr: usize,
 ) -> Option<json::JsonValue> {
-    if !parser::is_action_block(text, line_nr, char_nr) {
-        return None;
-    }
     log_dbg!(COMPL, "Complete for action block");
 
     let mut items = json::JsonValue::new_array();
     let is_incomplete = false; // Currently we provide complete list
 
-    let probe = find_probe_for_action(text, line_nr);
+    let probe = parser::find_probe_for_action(node, text);
     if !probe.is_empty() {
         log_dbg!(COMPL, "Found probe {}", probe);
     }
@@ -502,7 +500,7 @@ fn encode_completion_for_probes(line_str: &str) -> json::JsonValue {
 pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     let uri = &content["params"]["textDocument"]["uri"].to_string();
 
-    let emtpy_results = object! {
+    let empty_results = object! {
         "result": {
            "isIncomplete": false,
            "items": json::JsonValue::new_array(),
@@ -512,31 +510,37 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     let text_doc = if let Some(doc) = DOCUMENTS_STATE.get(uri) {
         doc
     } else {
-        return emtpy_results;
+        return empty_results;
     };
 
     let position = &content["params"]["position"];
     let line_nr = position["line"].as_usize().unwrap();
     let char_nr = position["character"].as_usize().unwrap();
     let text = &text_doc.text;
+
+    let tree = if let Some(tree) = &text_doc.syntax_tree {
+        tree
+    } else {
+        return empty_results;
+    };
+
+    let (loc, node) = parser::find_syntax_location(text, tree, line_nr, char_nr);
+    log_dbg!(COMPL, "Found syntax location: {:?}", loc);
+
     let line_str = text_get_line(text, line_nr);
     log_dbg!(COMPL, "Complete for line: '{}'", line_str);
 
-    let mut loc = SyntaxLocation::SourceFile;
-    if let Some(tree) = &text_doc.syntax_tree {
-        (loc, _) = parser::find_syntax_location(text, tree, line_nr, char_nr);
-        log_dbg!(COMPL, "Found syntax location: {:?}", loc);
+    if loc == SyntaxLocation::Action {
+        if let Some(data) = encode_completion_for_action(text, &node, &line_str, char_nr) {
+            return data;
+        }
     }
 
     if loc != SyntaxLocation::Comment {
-        if let Some(data) = encode_completion_for_action(text, &line_str, line_nr, char_nr) {
-            return data;
-        }
-
         return encode_completion_for_probes(&line_str);
     }
 
-    emtpy_results
+    empty_results
 }
 
 pub fn encode_completion_resolve(content: json::JsonValue) -> json::JsonValue {
