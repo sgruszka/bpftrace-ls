@@ -151,14 +151,16 @@ fn find_probe_args_by_command(probe: &str) -> String {
 
 fn find_kfunc_args_by_btf(kfunc: &str) -> Option<(String, ResolvedBtfItem)> {
     let kfunc_vec: Vec<&str> = kfunc.split(":").collect();
-    if kfunc_vec.len() < 3 {
+    log_dbg!(COMPL, "kfunc_vec {:?}", kfunc_vec);
+
+    if kfunc_vec.len() != 3 {
         return None;
     }
 
-    log_dbg!(COMPL, "kfunc_vec {:?}", kfunc_vec);
-
     let module = kfunc_vec[1];
-    assert!(!module.is_empty());
+    if module.is_empty() {
+        return None;
+    }
 
     let mut module_btf_map = MODULE_BTF_MAP.lock().unwrap();
 
