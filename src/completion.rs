@@ -12,7 +12,7 @@ use crate::btf_mod::{
 use crate::log_mod::{self, COMPL, HOVER};
 use crate::parser::{self, SyntaxLocation};
 use crate::DOCUMENTS_STATE;
-use crate::{log_dbg, log_vdbg};
+use crate::{log_dbg, log_err, log_vdbg};
 use btf_rs::Btf;
 
 static PROBES_ARGS_MAP: Lazy<Mutex<HashMap<String, String>>> =
@@ -121,9 +121,9 @@ fn find_probe_args_by_command(probe: &str) -> String {
 
     let mut probes_args_map = PROBES_ARGS_MAP.lock().unwrap();
 
-    let mut this_probe_args = "".to_string();
+    let mut probe_args = "".to_string();
     if let Some(args) = probes_args_map.get(&probe) {
-        this_probe_args = args.to_string();
+        probe_args = args.to_string();
     } else if let Ok(output) = Command::new("sudo")
         .arg("bpftrace")
         .arg("-l")
@@ -131,21 +131,22 @@ fn find_probe_args_by_command(probe: &str) -> String {
         .arg(probe.clone())
         .output()
     {
-        if let Ok(probe_args) = String::from_utf8(output.stdout) {
-            this_probe_args = probe_args.clone();
-            if let Ok(stderr_probe_args) = String::from_utf8(output.stderr) {
-                this_probe_args.push_str(&stderr_probe_args);
-            }
-            probes_args_map.insert(probe.clone(), this_probe_args.clone());
-            log_dbg!(
-                COMPL,
-                "Found arguments using command line\n{}",
-                this_probe_args
-            );
+        if let Ok(stdout_probe_args) = String::from_utf8(output.stdout) {
+            probe_args = stdout_probe_args.clone();
+        }
+        if let Ok(stderr_probe_args) = String::from_utf8(output.stderr) {
+            probe_args.push_str(&stderr_probe_args);
+        }
+
+        if probe_args.is_empty() {
+            log_err!("No arguments for probe {}", probe);
+        } else {
+            probes_args_map.insert(probe.clone(), probe_args.clone());
+            log_dbg!(COMPL, "Found arguments using command line\n{}", probe_args);
         }
     }
 
-    this_probe_args
+    probe_args
 }
 
 fn find_kfunc_args_by_btf(kfunc: &str) -> Option<(String, ResolvedBtfItem)> {
