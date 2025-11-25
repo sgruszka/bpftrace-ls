@@ -136,7 +136,7 @@ fn find_probe_args_by_command(probe: &str) -> String {
             if let Ok(stderr_probe_args) = String::from_utf8(output.stderr) {
                 this_probe_args.push_str(&stderr_probe_args);
             }
-            probes_args_map.insert(probe.clone(), probe_args.clone());
+            probes_args_map.insert(probe.clone(), this_probe_args.clone());
             log_dbg!(
                 COMPL,
                 "Found arguments using command line\n{}",
