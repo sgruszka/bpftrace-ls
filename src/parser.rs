@@ -8,7 +8,7 @@ use crate::log_mod::{self, PARSE};
 pub enum SyntaxLocation {
     SourceFile,
     Comment,
-    Probes,
+    ProbesList,
     Predicate,
     Action,
 }
@@ -54,7 +54,7 @@ fn node_to_syntax_location(node: &Node) -> SyntaxLocation {
     match node.kind() {
         "block_comment" => SyntaxLocation::Comment,
         "line_comment" => SyntaxLocation::Comment,
-        "probes" => SyntaxLocation::Probes,
+        "probes_list" => SyntaxLocation::ProbesList,
         "predicate" => SyntaxLocation::Predicate,
         "action" => SyntaxLocation::Action,
         _ => SyntaxLocation::SourceFile,
@@ -69,7 +69,7 @@ pub fn find_syntax_location<'t>(
 ) -> (SyntaxLocation, Node<'t>) {
     let query_str = r#"
     [
-        (probes) @probes
+        (probes_list) @probe_list
         (predicate) @predicate
         (action) @action
         (block_comment) @block_comment
@@ -127,11 +127,11 @@ pub fn find_probe_for_action(action: &Node, text: &str) -> String {
     let action_block = action.parent().unwrap();
     assert_eq!(action_block.kind(), "action_block");
 
-    let probes = action_block.child(0).unwrap();
-    assert_eq!(probes.kind(), "probes");
+    let probes_list = action_block.child(0).unwrap();
+    assert_eq!(probes_list.kind(), "probes_list");
 
     // TODO handle probe list and wildcard's
-    let probe = probes.child(0).unwrap();
+    let probe = probes_list.child(0).unwrap();
 
     let probe_text = probe.utf8_text(text.as_bytes());
 
@@ -157,7 +157,7 @@ pub fn find_location(tree: &Tree, line_nr: usize, char_nr: usize) -> SyntaxLocat
             "source_file" => SyntaxLocation::SourceFile,
             "block_comment" => SyntaxLocation::Comment,
             "line_comment" => SyntaxLocation::Comment,
-            "probes" => SyntaxLocation::Probes,
+            "probes_list" => SyntaxLocation::ProbesList,
             "predicate" => SyntaxLocation::Predicate,
             "action" => SyntaxLocation::Action,
             _ => SyntaxLocation::SourceFile,
@@ -255,12 +255,12 @@ mod tests {
         let action_block = root_node.child(0).unwrap();
         assert_eq!(action_block.kind(), "action_block");
 
-        let probes = action_block.child(0).unwrap();
+        let probes_list = action_block.child(0).unwrap();
         let action = action_block.child(1).unwrap();
-        assert_eq!(probes.kind(), "probes");
+        assert_eq!(probes_list.kind(), "probes_list");
         assert_eq!(action.kind(), "action");
 
-        let probe = probes.child(0).unwrap();
+        let probe = probes_list.child(0).unwrap();
         assert_eq!(probe.kind(), "probe");
         assert_eq!(probe.child_count(), 3);
         assert_eq!(probe.field_name_for_child(0).unwrap(), "provider");
@@ -275,7 +275,7 @@ mod tests {
         assert_eq!(ret, SyntaxLocation::Action);
 
         let ret = find_location(&tree, 0, 0);
-        assert_eq!(ret, SyntaxLocation::Probes);
+        assert_eq!(ret, SyntaxLocation::ProbesList);
 
         let ret = find_location(&tree, 1, 5);
         assert_eq!(ret, SyntaxLocation::Comment);
@@ -301,9 +301,9 @@ tracepoint:syscalls:sys_enter_openat {
         let tree = setup_syntax_tree(text);
 
         let ret = find_syntax_location(text, &tree, 1, 0);
-        assert_eq!(ret.0, SyntaxLocation::Probes);
+        assert_eq!(ret.0, SyntaxLocation::ProbesList);
         let ret = find_syntax_location(text, &tree, 2, 0);
-        assert_eq!(ret.0, SyntaxLocation::Probes);
+        assert_eq!(ret.0, SyntaxLocation::ProbesList);
 
         let ret = find_syntax_location(text, &tree, 3, 0);
         assert_eq!(ret.0, SyntaxLocation::Action);
