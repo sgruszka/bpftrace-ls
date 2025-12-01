@@ -2,7 +2,6 @@ vim.filetype.add({
   extension = {
     bt = "bpftrace"
   },
-  commentstring = "//%s",
 })
 
 local client = vim.lsp.start_client({
@@ -11,16 +10,12 @@ local client = vim.lsp.start_client({
   -- on_attach = config.on_attach,
 })
 
-if not client then
-  vim.notify("No LSP client")
-  return
-end
-
-
 vim.api.nvim_create_autocmd("FileType", {
   pattern = "bpftrace",
   callback = function ()
     vim.bo.commentstring = "// %s"
-    vim.lsp.buf_attach_client(0, client)
+    if client then
+      vim.lsp.buf_attach_client(0, client)
+    end
   end
 })
