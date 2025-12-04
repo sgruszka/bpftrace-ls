@@ -268,14 +268,19 @@ fn encode_code_action(content: json::JsonValue) -> json::JsonValue {
 
 // Parse single line errors:
 // stdin:6:60-69: ERROR: str() expects an integer or a pointer type as first argument (struct _tracepoint_syscalls_sys_exit_bpf provided)
-fn bpftrace_diag_single_line_error(mut line_nr: usize, tokens: &Vec<&str>) -> json::JsonValue {
+fn bpftrace_diag_single_line_error(
+    mut line_nr: usize,
+    tokens: &Vec<&str>,
+) -> Result<json::JsonValue, std::num::ParseIntError> {
+    assert!(tokens.len() > 2);
+
     if line_nr > 1 {
         line_nr -= 1;
     }
 
     let chars: Vec<&str> = tokens[2].split("-").collect();
-    let start: usize = chars[0].parse().unwrap();
-    let end: usize = chars[1].parse().unwrap();
+    let start_char_nr: usize = chars[0].parse()?;
+    let end_char_nr: usize = chars[1].parse()?;
 
     let to_severity = |e: &str| -> u32 {
         match e.trim() {
@@ -291,23 +296,32 @@ fn bpftrace_diag_single_line_error(mut line_nr: usize, tokens: &Vec<&str>) -> js
     };
 
     let diag = object! {
-        "range": { "start": { "line": line_nr, "character": start}, "end": {"line": line_nr, "character": end, }, },
+        "range": { "start": { "line": line_nr, "character": start_char_nr}, "end": {"line": line_nr, "character": end_char_nr, }, },
         "severity": to_severity(tokens[3]),
         // "source": "bpftrace -d",
         "message": format!("{}:{}", tokens[3], tail),
     };
 
-    diag
+    Ok(diag)
 }
 
 // Parse errors with lines range like this:
 // stdin:2-4: ERROR: Invalid probe type: kkprobe
-fn bpftrace_diag_multi_line_error(tokens: &Vec<&str>) -> json::JsonValue {
-    let start_end: Vec<&str> = tokens[1].split("-").collect();
-    // position error on last line
-    let mut line_nr: usize = start_end[1].parse().unwrap();
+fn bpftrace_diag_multi_line_error(
+    tokens: &Vec<&str>,
+) -> Result<json::JsonValue, std::num::ParseIntError> {
+    assert!(tokens.len() > 1);
+
+    let start_and_end: Vec<&str> = tokens[1].split("-").collect();
+
+    let mut line_nr: usize = start_and_end[1].parse()?;
     if line_nr > 1 {
         line_nr -= 1;
+    }
+
+    let mut end_line_nr: usize = start_and_end[1].parse()?;
+    if end_line_nr > 1 {
+        end_line_nr -= 1;
     }
 
     let to_severity = |e: &str| -> u32 {
@@ -324,24 +338,28 @@ fn bpftrace_diag_multi_line_error(tokens: &Vec<&str>) -> json::JsonValue {
     };
 
     let diag = object! {
-        "range": { "start": { "line": line_nr, "character": 0}, "end": {"line": line_nr, "character": 0, }, },
+        "range": { "start": { "line": line_nr, "character": 0}, "end": {"line": end_line_nr, "character": 0, }, },
         "severity": to_severity(tokens[2]),
         // "source": "bpftrace -d",
         "message": format!("{}:{}", tokens[2], tail),
     };
 
-    diag
+    Ok(diag)
 }
 
 // Parse definitions errors:
 // definitions.h:10:18: error: expected ';' at end of declaration list
-fn bpftrace_diag_definitions_error(tokens: &Vec<&str>) -> json::JsonValue {
-    let mut line_nr = tokens[1].parse::<usize>().unwrap();
+fn bpftrace_diag_definitions_error(
+    tokens: &Vec<&str>,
+) -> Result<json::JsonValue, std::num::ParseIntError> {
+    assert!(tokens.len() > 2);
+
+    let mut line_nr = tokens[1].parse::<usize>()?;
     if line_nr > 1 {
         line_nr -= 1;
     }
 
-    let end_char_nr = tokens[2].parse::<usize>().unwrap();
+    let end_char_nr = tokens[2].parse::<usize>()?;
     let start_char_nr = if end_char_nr > 0 {
         end_char_nr - 1
     } else {
@@ -361,7 +379,7 @@ fn bpftrace_diag_definitions_error(tokens: &Vec<&str>) -> json::JsonValue {
         "message": format!("ERROR:{}", msg),
     };
 
-    diag
+    Ok(diag)
 }
 
 fn do_diagnotics(text: &str) -> json::JsonValue {
@@ -390,16 +408,25 @@ fn do_diagnotics(text: &str) -> json::JsonValue {
     for line in output.lines() {
         let tokens: Vec<&str> = line.split(":").collect();
         log_dbg!(DIAGN, "Parsing error line: {}", line);
-        if tokens[0] == "stdin" && tokens.len() >= 3 {
-            if let Ok(line_nr) = tokens[1].parse::<usize>() {
-                let diag = bpftrace_diag_single_line_error(line_nr, &tokens);
-                let _ = diagnostics.push(diag);
+
+        if tokens.len() < 3 {
+            continue;
+        }
+
+        let diag_res = if tokens[0] == "stdin" {
+            let stdin_diag_err = if let Ok(line_nr) = tokens[1].parse::<usize>() {
+                bpftrace_diag_single_line_error(line_nr, &tokens)
             } else {
-                let diag = bpftrace_diag_multi_line_error(&tokens);
-                let _ = diagnostics.push(diag);
-            }
-        } else if tokens[0] == "definitions.h" && tokens.len() >= 3 {
-            let diag = bpftrace_diag_definitions_error(&tokens);
+                bpftrace_diag_multi_line_error(&tokens)
+            };
+            stdin_diag_err
+        } else if tokens[0] == "definitions.h" {
+            bpftrace_diag_definitions_error(&tokens)
+        } else {
+            continue;
+        };
+
+        if let Ok(diag) = diag_res {
             let _ = diagnostics.push(diag);
         }
     }
