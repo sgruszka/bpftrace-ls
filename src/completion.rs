@@ -636,7 +636,7 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         if let Some((_module, resolved_btf)) = args_by_btf {
             data = object! {
                   "result": {
-                      "contents": func_proto_str(&resolved_btf),
+                      "contents": format!("Probe for function:\n```c\n{}```", func_proto_str(&resolved_btf)),
                   },
             };
         }
