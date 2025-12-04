@@ -374,10 +374,15 @@ fn do_diagnotics(text: &str) -> json::JsonValue {
         .arg(text)
         .output()
     {
-        let s = String::from_utf8(output.stderr).expect("Need some text"); // TODO remove expect
-        log_vdbg!(DIAGN, "Output from bpftrace -d -e:\n{s}\n");
+        let output = if let Ok(out) = String::from_utf8(output.stderr) {
+            out
+        } else {
+            return diagnostics;
+        };
 
-        for line in s.lines() {
+        log_vdbg!(DIAGN, "Output from bpftrace -d -e:\n{output}\n");
+
+        for line in output.lines() {
             let tokens: Vec<&str> = line.split(":").collect();
             log_dbg!(DIAGN, "Parsing error line: {}", line);
             if tokens[0] == "stdin" && tokens.len() >= 3 {
