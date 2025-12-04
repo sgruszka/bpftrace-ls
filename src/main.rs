@@ -367,36 +367,40 @@ fn handle_definitions_error(tokens: &Vec<&str>) -> json::JsonValue {
 fn do_diagnotics(text: &str) -> json::JsonValue {
     let mut diagnostics = json::JsonValue::new_array();
 
-    if let Ok(output) = Command::new("sudo")
+    let output = if let Ok(out) = Command::new("sudo")
         .arg("bpftrace")
         .arg("-d")
         .arg("-e")
         .arg(text)
         .output()
     {
-        let output = if let Ok(out) = String::from_utf8(output.stderr) {
-            out
-        } else {
-            return diagnostics;
-        };
+        out
+    } else {
+        return diagnostics;
+    };
 
-        log_vdbg!(DIAGN, "Output from bpftrace -d -e:\n{output}\n");
+    let output = if let Ok(out) = String::from_utf8(output.stderr) {
+        out
+    } else {
+        return diagnostics;
+    };
 
-        for line in output.lines() {
-            let tokens: Vec<&str> = line.split(":").collect();
-            log_dbg!(DIAGN, "Parsing error line: {}", line);
-            if tokens[0] == "stdin" && tokens.len() >= 3 {
-                if let Ok(line_nr) = tokens[1].parse::<usize>() {
-                    let diag = handle_single_line_error(line_nr, &tokens);
-                    let _ = diagnostics.push(diag);
-                } else {
-                    let diag = handle_multi_line_error(&tokens);
-                    let _ = diagnostics.push(diag);
-                }
-            } else if tokens[0] == "definitions.h" && tokens.len() >= 3 {
-                let diag = handle_definitions_error(&tokens);
+    log_vdbg!(DIAGN, "Output from bpftrace -d -e:\n{output}\n");
+
+    for line in output.lines() {
+        let tokens: Vec<&str> = line.split(":").collect();
+        log_dbg!(DIAGN, "Parsing error line: {}", line);
+        if tokens[0] == "stdin" && tokens.len() >= 3 {
+            if let Ok(line_nr) = tokens[1].parse::<usize>() {
+                let diag = handle_single_line_error(line_nr, &tokens);
+                let _ = diagnostics.push(diag);
+            } else {
+                let diag = handle_multi_line_error(&tokens);
                 let _ = diagnostics.push(diag);
             }
+        } else if tokens[0] == "definitions.h" && tokens.len() >= 3 {
+            let diag = handle_definitions_error(&tokens);
+            let _ = diagnostics.push(diag);
         }
     }
 
