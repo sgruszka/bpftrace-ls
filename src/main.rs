@@ -268,7 +268,7 @@ fn encode_code_action(content: json::JsonValue) -> json::JsonValue {
 
 // Parse single line errors:
 // stdin:6:60-69: ERROR: str() expects an integer or a pointer type as first argument (struct _tracepoint_syscalls_sys_exit_bpf provided)
-fn handle_single_line_error(mut line_nr: usize, tokens: &Vec<&str>) -> json::JsonValue {
+fn bpftrace_diag_single_line_error(mut line_nr: usize, tokens: &Vec<&str>) -> json::JsonValue {
     if line_nr > 1 {
         line_nr -= 1;
     }
@@ -302,7 +302,7 @@ fn handle_single_line_error(mut line_nr: usize, tokens: &Vec<&str>) -> json::Jso
 
 // Parse errors with lines range like this:
 // stdin:2-4: ERROR: Invalid probe type: kkprobe
-fn handle_multi_line_error(tokens: &Vec<&str>) -> json::JsonValue {
+fn bpftrace_diag_multi_line_error(tokens: &Vec<&str>) -> json::JsonValue {
     let start_end: Vec<&str> = tokens[1].split("-").collect();
     // position error on last line
     let mut line_nr: usize = start_end[1].parse().unwrap();
@@ -335,7 +335,7 @@ fn handle_multi_line_error(tokens: &Vec<&str>) -> json::JsonValue {
 
 // Parse definitions errors:
 // definitions.h:10:18: error: expected ';' at end of declaration list
-fn handle_definitions_error(tokens: &Vec<&str>) -> json::JsonValue {
+fn bpftrace_diag_definitions_error(tokens: &Vec<&str>) -> json::JsonValue {
     let mut line_nr = tokens[1].parse::<usize>().unwrap();
     if line_nr > 1 {
         line_nr -= 1;
@@ -392,14 +392,14 @@ fn do_diagnotics(text: &str) -> json::JsonValue {
         log_dbg!(DIAGN, "Parsing error line: {}", line);
         if tokens[0] == "stdin" && tokens.len() >= 3 {
             if let Ok(line_nr) = tokens[1].parse::<usize>() {
-                let diag = handle_single_line_error(line_nr, &tokens);
+                let diag = bpftrace_diag_single_line_error(line_nr, &tokens);
                 let _ = diagnostics.push(diag);
             } else {
-                let diag = handle_multi_line_error(&tokens);
+                let diag = bpftrace_diag_multi_line_error(&tokens);
                 let _ = diagnostics.push(diag);
             }
         } else if tokens[0] == "definitions.h" && tokens.len() >= 3 {
-            let diag = handle_definitions_error(&tokens);
+            let diag = bpftrace_diag_definitions_error(&tokens);
             let _ = diagnostics.push(diag);
         }
     }
