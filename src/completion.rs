@@ -185,32 +185,6 @@ fn find_kfunc_args_by_btf(kfunc: &str) -> Option<(String, ResolvedBtfItem)> {
     None
 }
 
-fn not_used_bpftrace_stdlib_functions(items: &mut json::JsonValue) {
-    let completion_printf = object! {
-        "label": "printf",
-        "kind" : 3,
-        "detail" : "printf",
-        "documentation" : "TODO",
-    };
-    let _ = items.push(completion_printf);
-
-    let completion_str = object! {
-        "label": "str",
-        "kind" : 3,
-        "detail" : "TODO",
-        "documentation" : "need documentation",
-    };
-    let _ = items.push(completion_str);
-
-    let completion_args = object! {
-        "label": "args",
-        "kind" : 5,
-        "detail" : "TODO",
-        "documentation" : "need documentation",
-    };
-    let _ = items.push(completion_args);
-}
-
 fn encode_completion_for_action(
     text: &str,
     node: &Node,
