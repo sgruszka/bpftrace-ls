@@ -3,6 +3,7 @@ use std::process::Command;
 fn main() {
     println!("cargo:rerun-if-changed=build/stdlib.md");
     println!("cargo:rerun-if-changed=build/gen_completion_stdlib.py");
+    println!("cargo:rerun-if-changed=src/gen/");
 
     let status = Command::new("build/gen_completion_stdlib.py")
         .arg("build/stdlib.md")
