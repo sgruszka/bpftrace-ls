@@ -68,6 +68,7 @@ impl DocumentsState {
 
 pub mod btf_mod;
 mod completion;
+pub mod gen;
 pub mod parser;
 
 #[macro_use]

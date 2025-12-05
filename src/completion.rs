@@ -9,6 +9,7 @@ use tree_sitter::Node;
 use crate::btf_mod::{
     btf_iterate_over_names_chain, btf_resolve_func, btf_setup_module, ResolvedBtfItem,
 };
+use crate::gen::completion_stdlib::bpftrace_stdlib_functions;
 use crate::log_mod::{self, COMPL, HOVER};
 use crate::parser::{self, SyntaxLocation};
 use crate::DOCUMENTS_STATE;
@@ -184,7 +185,7 @@ fn find_kfunc_args_by_btf(kfunc: &str) -> Option<(String, ResolvedBtfItem)> {
     None
 }
 
-fn bpftrace_stdlib_functions(items: &mut json::JsonValue) {
+fn not_used_bpftrace_stdlib_functions(items: &mut json::JsonValue) {
     let completion_printf = object! {
         "label": "printf",
         "kind" : 3,
