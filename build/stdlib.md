@@ -1,3 +1,9 @@
+<!--
+This file originates from https://github.com/bpftrace/bpftrace
+It is licensed under the Apache License, Version 2.0
+See the LICENSE file of that project or https://www.apache.org/licenses/LICENSE-2.0
+-->
+
 # bpftrace Standard Library
 
 This includes builtins, functions, macros, and [map value functions](#map-value-functions).
