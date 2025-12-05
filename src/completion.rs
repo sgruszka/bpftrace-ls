@@ -456,15 +456,24 @@ fn encode_completion_for_empty_line(prefixes: &[&str]) -> json::JsonValue {
 
 fn encode_completion_for_probes(line_str: &str) -> json::JsonValue {
     let prefixes = [
+        "begin",
+        "end",
+        "test",
+        "bench",
+        "self",
+        "interval",
+        "profile",
         "iter",
         "hardware",
+        "software",
+        "rawtracepoint",
         "tracepoint",
         "kprobe",
         "kretprobe",
-        "software",
-        "rawtracepoint",
         "kfunc",
         "kretfunc",
+        "fentry",
+        "fexit",
     ];
 
     if !line_str.is_empty() {
