@@ -772,8 +772,10 @@ mod tests {
         let result = encode_completion(json_content);
         assert!(result["result"]["items"].len() > 0);
 
-        // TODO other items than printf
-        check_completion_resutls(result, vec!["printf"]);
+        let functions = vec![
+            "printf", "print", "str", "strlen", "assert", "cpu", "curtask", "exit", "is_ptr",
+        ];
+        check_completion_resutls(result, functions);
     }
 
     #[test]
