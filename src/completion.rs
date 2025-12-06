@@ -265,6 +265,16 @@ fn encode_completion_for_action(
     } else {
         // TODO preload btf module
         bpftrace_stdlib_functions(&mut items);
+
+        let completion_args = object! {
+            "label": "args",
+            "kind" : 5,
+            "detail" : "args",
+            "documentation" : r#"
+This keyword represents the struct of all arguments of the traced function.
+You can print the entire structure via `print(args)` or access particular fields using the dot syntax, e.g., `$x = str(args.filename);`. "#,
+        };
+        let _ = items.push(completion_args);
     }
 
     let data = object! {
