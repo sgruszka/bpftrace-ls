@@ -1,3 +1,8 @@
+<!--
+This file originates from https://github.com/bpftrace/bpftrace
+It is licensed under the Apache License, Version 2.0
+See the LICENSE file of that project or https://www.apache.org/licenses/LICENSE-2.0
+-->
 # The bpftrace Language
 
 The `bpftrace` (`bt`) language is inspired by the D language used by `dtrace` and uses the same program structure.
