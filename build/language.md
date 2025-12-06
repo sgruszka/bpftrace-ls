@@ -1260,6 +1260,16 @@ fexit:fget {
  */
 ```
 
+### kfunc
+* `kfunc[:module]:function`
+
+Deprecated alias for `fentry`.
+
+### kretfunc
+* `kretfunc[:module:]function`
+
+Deprecated alias for `fexit`.
+
 ### kprobe
 **variants**
 * `kprobe[:module]:fn`
