@@ -1,7 +1,6 @@
 # bpftrace-ls
 
-bptftrace language server
-
+[LSP](https://microsoft.github.io/language-server-protocol/) Languge Server for [bpftrace](https://github.com/bpftrace/bpftrace)
 ## Testing in neovim
 ```bash
 nvim --cmd ":luafile setup.lua" your_bpftrace_file.bt
@@ -9,7 +8,7 @@ nvim --cmd ":luafile setup.lua" your_bpftrace_file.bt
 
 ## Sudo configuration
 The server internally runs **sudo bpftrace**
- Therefore, you must allow your run bpftrace with sudo.
+Therefore, you must allow to run bpftrace with sudo.
 For example open a custom sudoers file:
 ```bash
 $ sudo visudo -f /etc/sudoers.d/bpftrace
