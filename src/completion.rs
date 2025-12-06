@@ -9,6 +9,7 @@ use tree_sitter::Node;
 use crate::btf_mod::{
     btf_iterate_over_names_chain, btf_resolve_func, btf_setup_module, ResolvedBtfItem,
 };
+use crate::gen::completion_probes::bpftrace_probe_providers;
 use crate::gen::completion_stdlib::bpftrace_stdlib_functions;
 use crate::log_mod::{self, COMPL, HOVER};
 use crate::parser::{self, SyntaxLocation};
@@ -431,18 +432,10 @@ fn encode_completion_for_line(prefix: &str, line_str: &str) -> Option<json::Json
     Some(data)
 }
 
-fn encode_completion_for_empty_line(prefixes: &[&str]) -> json::JsonValue {
+fn encode_completion_for_empty_line() -> json::JsonValue {
     let mut items = json::JsonValue::new_array();
 
-    for prefix in prefixes.iter() {
-        let prefix_item = object! {
-            "label": prefix.to_string(),
-            "kind": 8,
-            "detail": "TODO",
-            "documentation": "need better documentation"
-        };
-        let _ = items.push(prefix_item);
-    }
+    bpftrace_probe_providers(&mut items);
 
     let data = object! {
         "result": {
@@ -484,7 +477,7 @@ fn encode_completion_for_probes(line_str: &str) -> json::JsonValue {
         }
     }
 
-    encode_completion_for_empty_line(&prefixes[..])
+    encode_completion_for_empty_line()
 }
 
 pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
