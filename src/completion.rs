@@ -783,14 +783,15 @@ mod tests {
 
     #[test]
     fn test_probes_completion_for_modules() {
-        let text = "kfunc:";
-        let json_content = completion_setup(text, 0, text.len() - 1);
+        for text in vec!["kfunc:", "kretfunc", "fentry", "fexit"].into_iter() {
+            let json_content = completion_setup(text, 0, text.len() - 1);
 
-        let result = encode_completion(json_content);
-        assert!(result["result"]["items"].len() > 0);
+            let result = encode_completion(json_content);
+            assert!(result["result"]["items"].len() > 0);
 
-        // TODO other items than vmlinux? Use 'lsmod' ?
-        check_completion_resutls(result, vec!["vmlinux"]);
+            // TODO other items than vmlinux? Use 'lsmod' ?
+            check_completion_resutls(result, vec!["vmlinux"]);
+        }
     }
 
     #[test]
