@@ -21,3 +21,4 @@ Cargo.lock
 #.idea/
 
 src/gen/completion_stdlib.rs
+src/gen/completion_probes.rs
