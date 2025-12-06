@@ -840,4 +840,16 @@ mod tests {
         ];
         check_completion_resutls(result, fields);
     }
+
+    #[test]
+    fn test_args_completion_for_posix_cpu_clock_get() {
+        let text = r#"fexit:vmlinux:posix_cpu_clock_get { args. }"#;
+        let json_content = completion_setup(text, 0, text.len() - 2);
+
+        let result = encode_completion(json_content);
+        assert!(result["result"]["items"].len() > 0);
+
+        let fields = vec!["retval", "tp", "clock"];
+        check_completion_resutls(result, fields);
+    }
 }
