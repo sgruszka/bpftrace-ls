@@ -1095,7 +1095,7 @@ tracepoint:raw_syscalls:sys_enter { @syscalls = count(); }
 interval:1s { print(@syscalls); clear(@syscalls); }
 ```
 
-### iterator
+### iter
 
 **variants**
 
