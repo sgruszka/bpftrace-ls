@@ -942,17 +942,21 @@ Most providers also support a short name which can be used instead of the full n
 | [`usdt`](#usdt) | `U` | User-level static tracepoints |
 | [`watchpoint/asyncwatchpoint`](#watchpoint-and-asyncwatchpoint) | `w`/`aw` | Memory watchpoints |
 
-### begin/end
-
-These are special built-in events provided by the bpftrace runtime.
+### begin
+Special built-in event provided by the bpftrace runtime.
 `begin` is triggered before all other probes are attached.
+Can be used any number of times, and they will be executed in the same order they are declared.
+
+### end
+Special built-in event provided by the bpftrace runtime.
 `end` is triggered after all other probes are detached.
 Each of these probes can be used any number of times, and they will be executed in the same order they are declared.
-For imports containing `begin` and `end` probes, an effort is made to preserve the partial order implied by the import graph (e.g. if `A` depends on `B`, then `B` will have both its `begin` and `end` probes executed first), but this is not strictly guaranteed.
 
-Note that specifying an `end` probe doesn’t override the printing of 'non-empty' maps at exit.
+#### Notes
+Specifying an `end` probe doesn’t override the printing of 'non-empty' maps at exit.
 To prevent printing all used maps need be cleared in the `end` probe:
 
+#### Example
 ```
 end {
     clear(@map1);
@@ -1185,24 +1189,13 @@ iter:task_file:/sys/fs/bpf/files {
  */
 ```
 
-### fentry and fexit
-
-**variants**
-
+### fentry
 * `fentry[:module]:fn`
-* `fexit[:module]:fn`
 * `fentry:bpf[:prog_id]:prog_name`
-* `fexit:bpf[:prog_id]:prog_name`
 
 **short names**
 
 * `f` (`fentry`)
-* `fr` (`fexit`)
-
-**requires (`--info`)**
-
-* Kernel features:BTF
-* Probe types:fentry
 
 ``fentry``/``fexit`` probes attach to kernel functions similar to [kprobe and kretprobe](#kprobe-and-kretprobe).
 They make use of eBPF trampolines which allow kernel code to call into BPF programs with near zero overhead.
@@ -1224,6 +1217,7 @@ To see a list of running, valid BPF programs and sub-programs use `bpftrace -l '
 Note: only BPF programs with a BTF Id can be attached to.
 Also, the `args` builtin is not yet available for this variant.
 
+#### Examples
 ```
 # bpftrace -lv 'fentry:tcp_reset'
 
@@ -1237,6 +1231,20 @@ fentry:x86_pmu_stop {
   printf("pmu %s stop\n", str(args.event.pmu.name));
 }
 ```
+### fexit
+
+**variants**
+* `fexit[:module]:fn`
+* `fexit:bpf[:prog_id]:prog_name`
+
+**short names**
+* `fr`
+
+``fentry``/``fexit`` probes attach to kernel functions similar to [kprobe and kretprobe](#kprobe-and-kretprobe).
+They make use of eBPF trampolines which allow kernel code to call into BPF programs with near zero overhead.
+Originally, these were called `kfunc` and `kretfunc` but were later renamed to `fentry` and `fexit` to match
+how these are referenced in the kernel and to prevent confusion with [BPF Kernel Functions](https://docs.kernel.org/bpf/kfuncs.html).
+The original names are still supported for backwards compatibility.
 
 The fget function takes one argument as file descriptor and you can access it via args.fd and the return value is accessible via retval:
 
@@ -1252,18 +1260,12 @@ fexit:fget {
  */
 ```
 
-### kprobe and kretprobe
-
+### kprobe
 **variants**
-
 * `kprobe[:module]:fn`
 * `kprobe[:module]:fn+offset`
-* `kretprobe[:module]:fn`
-
 **short names**
-
 * `k`
-* `kr`
 
 ``kprobe``s allow for dynamic instrumentation of kernel functions.
 Each time the specified kernel function is executed the attached BPF programs are ran.
@@ -1323,6 +1325,12 @@ kprobe:kvm:x86_emulate_insn
 See [BTF Support](#btf-support) for more details.
 
 `kprobe` s are not limited to function entry, they can be attached to any instruction in a function by specifying an offset from the start of the function.
+
+### kretprobe
+**variants**
+* `kretprobe[:module]:fn`
+**short names**
+* `kr`
 
 `kretprobe` s trigger on the return from a kernel function.
 Return probes do not have access to the function (input) arguments, only to the return value (through `retval`).
@@ -1471,19 +1479,15 @@ After the "common" members listed first, the members are specific to the tracepo
 
 * https://www.kernel.org/doc/html/latest/trace/tracepoints.html
 
-### uprobe, uretprobe
+### uprobe
 
 **variants**
-
 * `uprobe:binary:func`
 * `uprobe:binary:func+offset`
 * `uprobe:binary:offset`
-* `uretprobe:binary:func`
 
 **short names**
-
 * `u`
-* `ur`
 
 `uprobe` s or user-space probes are the user-space equivalent of `kprobe` s.
 The same limitations that apply [kprobe and kretprobe](#kprobe-and-kretprobe) also apply to `uprobe` s and `uretprobe` s, namely: arguments are available via the `argN` builtins and can only be accessed with a uprobe.
@@ -1556,6 +1560,14 @@ stack: frame={sp:0xc00008cf60, fp:0xc00008cfd0} stack=[0xc00008c000,0xc00008d000
 fatal error: unknown caller pc
 ```
 
+### uretprobe
+
+**variants**
+* `uretprobe:binary:func`
+
+**short names**
+* `ur`
+
 ### usdt
 
 **variants**
@@ -1603,16 +1615,28 @@ Also note that --usdt-file-activation matches based on file path.
 This means that if bpftrace runs from the root host, things may not work as expected if there are processes execved from private mount namespaces or bind mounted directories.
 One workaround is to run bpftrace inside the appropriate namespaces (i.e. the container).
 
-### watchpoint and asyncwatchpoint
-
+### watchpoint
 **variants**
-
 * `watchpoint:absolute_address:length:mode`
 * `watchpoint:function+argN:length:mode`
 
 **short names**
 
 * `w`
+
+These are memory watchpoints provided by the kernel.
+Whenever a memory address is written to (`w`), read
+from (`r`), or executed (`x`), the kernel can generate an event.
+
+### asyncwatchpoint
+
+**variants**
+
+* `asyncwatchpoint:absolute_address:length:mode`
+* `asyncwatchpoint:function+argN:length:mode`
+
+**short names**
+
 * `aw`
 
 This feature is experimental and may be subject to interface changes.
