@@ -105,7 +105,7 @@ fn find_probe_for_action(text: &str, line_nr: usize) -> String {
 
 fn kprobe_to_kfunc(probe: &str) -> String {
     let mut v: Vec<&str> = probe.split(":").collect();
-    if v[0] == "kprobe" || v[0] == "kretprobe" {
+    if v[0] == "kprobe" || v[0] == "kretprobe" || v[0] == "fentry" || v[0] == "fexit" {
         v[0] = "kfunc";
     }
     let kfunc = v[..].join(":").to_string();
@@ -211,6 +211,8 @@ fn encode_completion_for_action(
             || probe.starts_with("kretprobe:")
             || probe.starts_with("kfunc:")
             || probe.starts_with("kretfunc:")
+            || probe.starts_with("fentry")
+            || probe.starts_with("fexit")
         {
             is_kfunc = true;
         }
@@ -359,7 +361,11 @@ fn encode_completion_for_line(prefix: &str, line_str: &str) -> Option<json::Json
     let mut duplicates: HashMap<String, u32> = HashMap::new();
 
     let mut line_tokens: Vec<&str> = line_str.split(":").collect();
-    if line_str.trim().starts_with("kretfunc") || line_str.trim().starts_with("kretprobe") {
+    if line_str.trim().starts_with("kretfunc")
+        || line_str.trim().starts_with("kretprobe")
+        || line_str.trim().starts_with("fexit")
+        || line_str.trim().starts_with("fentry")
+    {
         line_tokens[0] = "kfunc";
     }
     let search_line = line_tokens.join(":");
