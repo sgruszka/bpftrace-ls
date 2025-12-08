@@ -1,5 +1,4 @@
 use json::{self, object};
-// use once_cell::sync::OnceCell;
 use tree_sitter;
 use tree_sitter_bpftrace;
 
@@ -7,12 +6,21 @@ use once_cell::sync::Lazy;
 use std::{
     collections::HashMap,
     io::{self, Read, Write},
-    process::Command,
     sync::{mpsc, Arc, RwLock},
     thread,
     time::{Duration, Instant},
 };
 
+pub mod btf_mod;
+mod cmd_mod;
+mod completion;
+pub mod gen;
+pub mod parser;
+
+#[macro_use]
+pub mod log_mod;
+
+use log_mod::{DIAGN, NOTIF, PROTO};
 const PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PKG_NAME: &str = env!("CARGO_PKG_NAME");
 
@@ -65,16 +73,6 @@ impl DocumentsState {
         write_guard.map.insert(uri, text_doc);
     }
 }
-
-pub mod btf_mod;
-mod completion;
-pub mod gen;
-pub mod parser;
-
-#[macro_use]
-pub mod log_mod;
-
-use log_mod::{DIAGN, NOTIF, PROTO};
 
 #[derive(Debug)]
 enum LspMessageType {
@@ -386,20 +384,18 @@ fn bpftrace_diag_definitions_error(
 fn do_diagnotics(text: &str) -> json::JsonValue {
     let mut diagnostics = json::JsonValue::new_array();
 
-    let output = if let Ok(out) = Command::new("sudo")
-        .arg("bpftrace")
-        .arg("-d")
-        .arg("-e")
-        .arg(text)
-        .output()
-    {
-        out
+    let mut cmd = cmd_mod::bpftrace_debug_command();
+    cmd.arg("-e");
+    cmd.arg(text);
+
+    let output = if let Ok(ok_output) = cmd.output() {
+        ok_output
     } else {
         return diagnostics;
     };
 
-    let output = if let Ok(out) = String::from_utf8(output.stderr) {
-        out
+    let output = if let Ok(ok_output) = String::from_utf8(output.stderr) {
+        ok_output
     } else {
         return diagnostics;
     };
@@ -784,6 +780,7 @@ fn main() {
     log_dbg!(PROTO, "{} {} started", PKG_NAME, PKG_VERSION);
 
     let _completion_init = thread::spawn(completion::init_available_traces);
+    let _command_init = thread::spawn(cmd_mod::init);
 
     let (mpsc_tx, mpsc_rx) = mpsc::channel::<MpscMessage>();
     let diag_mpsc_tx = mpsc_tx.clone();
