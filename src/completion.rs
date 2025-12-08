@@ -357,10 +357,10 @@ fn encode_completion_for_line(prefix: &str, line_str: &str) -> Option<json::Json
             available_traces = AVAILABE_TRACES.get().unwrap();
             log_vdbg!(COMPL, "List of available traces: \n{available_traces}\n");
         } else {
-            return None;
+            return Some(encode_no_completion());
         }
     } else {
-        return None;
+        return Some(encode_no_completion());
     }
 
     let mut items = json::JsonValue::new_array();
@@ -463,6 +463,18 @@ fn encode_completion_for_empty_line() -> json::JsonValue {
     data
 }
 
+fn encode_no_completion() -> json::JsonValue {
+    let items = json::JsonValue::new_array();
+    let empty_data = object! {
+        "result": {
+            "isIncomplete": false,
+            "items": items,
+        }
+    };
+
+    empty_data
+}
+
 fn encode_completion_for_probes(line_str: &str) -> json::JsonValue {
     let prefixes = [
         "begin",
@@ -499,17 +511,10 @@ fn encode_completion_for_probes(line_str: &str) -> json::JsonValue {
 pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     let uri = &content["params"]["textDocument"]["uri"].to_string();
 
-    let empty_results = object! {
-        "result": {
-           "isIncomplete": false,
-           "items": json::JsonValue::new_array(),
-        }
-    };
-
     let text_doc = if let Some(doc) = DOCUMENTS_STATE.get(uri) {
         doc
     } else {
-        return empty_results;
+        return encode_no_completion();
     };
 
     let position = &content["params"]["position"];
@@ -520,7 +525,7 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     let tree = if let Some(tree) = &text_doc.syntax_tree {
         tree
     } else {
-        return empty_results;
+        return encode_no_completion();
     };
 
     let (loc, node) = parser::find_syntax_location(text, tree, line_nr, char_nr);
@@ -539,7 +544,7 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
         return encode_completion_for_probes(&line_str);
     }
 
-    empty_results
+    encode_no_completion()
 }
 
 pub fn encode_completion_resolve(content: json::JsonValue) -> json::JsonValue {
