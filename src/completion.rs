@@ -1,7 +1,6 @@
 use json::{self, object};
 use once_cell::sync::{Lazy, OnceCell};
 use std::collections::HashMap;
-use std::process::Command;
 use std::str::Lines;
 use std::sync::Mutex;
 use tree_sitter::Node;
@@ -9,6 +8,7 @@ use tree_sitter::Node;
 use crate::btf_mod::{
     btf_iterate_over_names_chain, btf_resolve_func, btf_setup_module, ResolvedBtfItem,
 };
+use crate::cmd_mod::bpftrace_command;
 use crate::gen::completion_probes::bpftrace_probe_providers;
 use crate::gen::completion_stdlib::bpftrace_stdlib_functions;
 use crate::log_mod::{self, COMPL, HOVER};
@@ -126,8 +126,7 @@ fn find_probe_args_by_command(probe: &str) -> String {
     let mut probe_args = "".to_string();
     if let Some(args) = probes_args_map.get(&probe) {
         probe_args = args.to_string();
-    } else if let Ok(output) = Command::new("sudo")
-        .arg("bpftrace")
+    } else if let Ok(output) = bpftrace_command()
         .arg("-l")
         .arg("-v")
         .arg(probe.clone())
@@ -329,7 +328,7 @@ pub fn init_available_traces() {
     if let Some(_traces) = AVAILABE_TRACES.get() {
         return;
     } else {
-        if let Ok(output) = Command::new("sudo").arg("bpftrace").arg("-l").output() {
+        if let Ok(output) = bpftrace_command().arg("-l").output() {
             if let Ok(traces) = String::from_utf8(output.stdout) {
                 let _ = AVAILABE_TRACES.set(traces);
                 //available_traces = AVAILABE_TRACES.get().unwrap();
@@ -351,7 +350,7 @@ fn encode_completion_for_line(prefix: &str, line_str: &str) -> Option<json::Json
     let available_traces;
     if let Some(traces) = AVAILABE_TRACES.get() {
         available_traces = traces;
-    } else if let Ok(output) = Command::new("sudo").arg("bpftrace").arg("-l").output() {
+    } else if let Ok(output) = bpftrace_command().arg("-l").output() {
         if let Ok(traces) = String::from_utf8(output.stdout) {
             let _ = AVAILABE_TRACES.set(traces);
             available_traces = AVAILABE_TRACES.get().unwrap();
