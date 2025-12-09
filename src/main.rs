@@ -440,6 +440,12 @@ fn send_diag_command(uri: String, diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
         log_dbg!(DIAGN, "No text document for {}", uri);
         return;
     };
+
+    if text_doc.text.trim().is_empty() {
+        log_dbg!(DIAGN, "No diagnostics for empty text {}", text_doc.text);
+        return;
+    }
+
     let version = text_doc.version;
 
     log_dbg!(
