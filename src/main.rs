@@ -2,11 +2,10 @@ use json::{self, object};
 use tree_sitter;
 use tree_sitter_bpftrace;
 
-use once_cell::sync::Lazy;
 use std::{
     collections::HashMap,
     io::{self, Read, Write},
-    sync::{mpsc, Arc, RwLock},
+    sync::{mpsc, Arc, LazyLock, RwLock},
     thread,
     time::{Duration, Instant},
 };
@@ -49,10 +48,10 @@ impl DocumentsData {
     }
 }
 
-pub struct DocumentsState(Lazy<RwLock<DocumentsData>>);
+pub struct DocumentsState(LazyLock<RwLock<DocumentsData>>);
 
 pub static DOCUMENTS_STATE: DocumentsState =
-    DocumentsState(Lazy::new(|| RwLock::new(DocumentsData::new())));
+    DocumentsState(LazyLock::new(|| RwLock::new(DocumentsData::new())));
 
 impl DocumentsState {
     fn get(&self, uri: &str) -> Option<Arc<TextDocument>> {

@@ -1,8 +1,7 @@
 use json::{self, object};
-use once_cell::sync::{Lazy, OnceCell};
 use std::collections::HashMap;
 use std::str::Lines;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex, OnceLock};
 use tree_sitter::Node;
 
 use crate::btf_mod::{
@@ -17,10 +16,13 @@ use crate::DOCUMENTS_STATE;
 use crate::{log_dbg, log_err, log_vdbg};
 use btf_rs::Btf;
 
-static PROBES_ARGS_MAP: Lazy<Mutex<HashMap<String, String>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+static PROBES_ARGS_MAP: LazyLock<Mutex<HashMap<String, String>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
-static MODULE_BTF_MAP: Lazy<Mutex<HashMap<String, Btf>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+static MODULE_BTF_MAP: LazyLock<Mutex<HashMap<String, Btf>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+static AVAILABE_TRACES: OnceLock<String> = OnceLock::new();
 
 fn text_get_line(text: &str, line_nr: usize) -> String {
     let mut from_line = String::new();
@@ -320,11 +322,7 @@ fn func_proto_str(item: &ResolvedBtfItem) -> String {
     s
 }
 
-// TODO: convert to std::sync::OnceLock
-static AVAILABE_TRACES: OnceCell<String> = OnceCell::new();
-
 pub fn init_available_traces() {
-    // TODO is OneCell thread safe
     if let Some(_traces) = AVAILABE_TRACES.get() {
         return;
     } else {

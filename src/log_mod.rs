@@ -1,7 +1,7 @@
-use once_cell::sync::OnceCell;
 use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
+use std::sync::OnceLock;
 
 pub const PROTO: u32 = 1 << 0;
 pub const DIAGN: u32 = 1 << 1;
@@ -77,7 +77,7 @@ pub struct Logger {
     verbose_debug: u32,
 }
 
-static LOGGER: OnceCell<Logger> = OnceCell::new();
+static LOGGER: OnceLock<Logger> = OnceLock::new();
 
 // TODO: handle errors without expect()
 pub fn create_logger(filename: &str) -> Result<(), std::io::Error> {
