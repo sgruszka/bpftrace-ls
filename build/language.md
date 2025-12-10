@@ -350,7 +350,7 @@ fentry:x86_pmu_stop {
 * `fexit[:module]:function`
 * `fexit:bpf[:prog_id]:prog_name`
 
-**short names**
+**short name**
 * `fr`
 
 ``fentry``/``fexit`` probes attach to kernel functions similar to [kprobe and kretprobe](#kprobe-and-kretprobe).
@@ -386,7 +386,7 @@ Deprecated alias for `fexit`.
 ### kprobe
 **variants**
 * `kprobe[:module]:function[+offset]`
-**short names**
+**short name**
 * `k`
 
 ``kprobe``s allow for dynamic instrumentation of kernel functions.
@@ -451,7 +451,7 @@ See [BTF Support](#btf-support) for more details.
 ### kretprobe
 **variants**
 * `kretprobe[:module]:function`
-**short names**
+**short name**
 * `kr`
 
 `kretprobe` s trigger on the return from a kernel function.
@@ -683,7 +683,7 @@ fatal error: unknown caller pc
 **variants**
 * `uretprobe:binary:function`
 
-**short names**
+**short name**
 * `ur`
 
 ### usdt
@@ -738,7 +738,7 @@ One workaround is to run bpftrace inside the appropriate namespaces (i.e. the co
 * `watchpoint:absolute_address:length:mode`
 * `watchpoint:function+argN:length:mode`
 
-**short names**
+**short name**
 
 * `w`
 
@@ -753,7 +753,7 @@ from (`r`), or executed (`x`), the kernel can generate an event.
 * `asyncwatchpoint:absolute_address:length:mode`
 * `asyncwatchpoint:function+argN:length:mode`
 
-**short names**
+**short name**
 
 * `aw`
 
