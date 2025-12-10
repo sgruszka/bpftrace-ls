@@ -216,7 +216,7 @@ fn is_args(line_str: &str, char_nr: usize) -> bool {
 
 pub fn is_argument(line_str: &str, char_nr: usize, args: &mut String) -> bool {
     let mut res = false;
-    if let Some(line_upto_char) = line_str.get(0..char_nr) {
+    if let Some(line_upto_char) = line_str.get(0..=char_nr) {
         if let Some(last_word) = line_upto_char
             .rsplit(|c| c == ' ' || c == '{' || c == '(')
             .nth(0)

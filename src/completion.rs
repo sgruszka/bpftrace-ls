@@ -517,8 +517,13 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     };
 
     let position = &content["params"]["position"];
-    let line_nr = position["line"].as_usize().unwrap();
-    let char_nr = position["character"].as_usize().unwrap();
+
+    let line_nr = position["line"].as_usize().unwrap_or_default();
+    let char_nr = position["character"]
+        .as_usize()
+        .unwrap_or_default()
+        .saturating_sub(1);
+
     let text = &text_doc.text;
 
     let tree = if let Some(tree) = &text_doc.syntax_tree {
@@ -531,7 +536,13 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     log_dbg!(COMPL, "Found syntax location: {:?}", loc);
 
     let line_str = text_get_line(text, line_nr);
-    log_dbg!(COMPL, "Complete for line: '{}'", line_str);
+    log_dbg!(
+        COMPL,
+        "Complete for line: '{}' at char {} : '{}'",
+        line_str,
+        char_nr,
+        line_str.chars().nth(char_nr).unwrap_or_default()
+    );
 
     if loc == SyntaxLocation::Action {
         if let Some(data) = encode_completion_for_action(text, &node, &line_str, char_nr) {
@@ -540,7 +551,16 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     }
 
     if loc != SyntaxLocation::Comment {
-        return encode_completion_for_probes(&line_str);
+        let up_to_char = char_nr.saturating_add(1);
+        let line_head = if let Some(splited_line) = line_str.split_at_checked(up_to_char) {
+            let (head, _tail) = splited_line;
+            head
+        } else {
+            &line_str
+        };
+
+        log_dbg!(COMPL, "Complete for line head: '{line_head}'");
+        return encode_completion_for_probes(line_head);
     }
 
     encode_no_completion()
@@ -797,7 +817,7 @@ mod tests {
 
     #[test]
     fn test_probes_completion_for_modules() {
-        for text in vec!["kfunc:", "kretfunc", "fentry", "fexit"].into_iter() {
+        for text in vec!["kfunc:", "kretfunc:", "fentry:", "fexit:"].into_iter() {
             let json_content = completion_setup(text, 0, text.len() - 1);
 
             let result = encode_completion(json_content);
