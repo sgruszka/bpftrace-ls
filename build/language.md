@@ -61,11 +61,13 @@ Most providers also support a short name which can be used instead of the full n
 | [`watchpoint/asyncwatchpoint`](#watchpoint-and-asyncwatchpoint) | `w`/`aw` | Memory watchpoints |
 
 ### begin
+* `begin`
 Special built-in event provided by the bpftrace runtime.
 `begin` is triggered before all other probes are attached.
 Can be used any number of times, and they will be executed in the same order they are declared.
 
 ### end
+* `end`
 Special built-in event provided by the bpftrace runtime.
 `end` is triggered after all other probes are detached.
 Each of these probes can be used any number of times, and they will be executed in the same order they are declared.
@@ -83,6 +85,7 @@ end {
 ```
 
 ### test
+* `test:name`
 
 `test` is a special built-in probe type for creating tests.
 bpftrace executes each `test` probe and checks the return value, error count and possible exit calls to determine a pass.
@@ -101,6 +104,7 @@ test:failure {
 ```
 
 ### bench
+* `bench:name`
 
 `bench` is a special built-in probe type for creating micro benchmarks.
 bpftrace executes each `bench` probe repeatedly to measure the average execution time of the contained code.
@@ -156,8 +160,7 @@ self:signal:SIGUSR1 {
 
 **variants**
 
-* `hardware:event_name:`
-* `hardware:event_name:count`
+* `hardware:event_name[:count]`
 
 **short name**
 
@@ -192,10 +195,7 @@ hardware:cache-misses:1e6 { @[pid] = count(); }
 
 **variants**
 
-* `interval:count`
-* `interval:us:count`
-* `interval:ms:count`
-* `interval:s:count`
+* `interval[:time_unit]:count`
 * `interval:hz:rate`
 
 **short name**
@@ -217,12 +217,7 @@ interval:1s { print(@syscalls); clear(@syscalls); }
 
 **variants**
 
-* `iter:task`
-* `iter:task:pin`
-* `iter:task_file`
-* `iter:task_file:pin`
-* `iter:task_vma`
-* `iter:task_vma:pin`
+* `iter:object[:pin]`
 
 **short name**
 
@@ -308,12 +303,12 @@ iter:task_file:/sys/fs/bpf/files {
 ```
 
 ### fentry
-* `fentry[:module]:fn`
+* `fentry[:module]:function`
 * `fentry:bpf[:prog_id]:prog_name`
 
 **short names**
 
-* `f` (`fentry`)
+* `f`
 
 ``fentry``/``fexit`` probes attach to kernel functions similar to [kprobe and kretprobe](#kprobe-and-kretprobe).
 They make use of eBPF trampolines which allow kernel code to call into BPF programs with near zero overhead.
@@ -352,7 +347,7 @@ fentry:x86_pmu_stop {
 ### fexit
 
 **variants**
-* `fexit[:module]:fn`
+* `fexit[:module]:function`
 * `fexit:bpf[:prog_id]:prog_name`
 
 **short names**
@@ -390,8 +385,7 @@ Deprecated alias for `fexit`.
 
 ### kprobe
 **variants**
-* `kprobe[:module]:fn`
-* `kprobe[:module]:fn+offset`
+* `kprobe[:module]:function[+offset]`
 **short names**
 * `k`
 
@@ -456,7 +450,7 @@ See [BTF Support](#btf-support) for more details.
 
 ### kretprobe
 **variants**
-* `kretprobe[:module]:fn`
+* `kretprobe[:module]:function`
 **short names**
 * `kr`
 
@@ -483,10 +477,7 @@ kretprobe:d_lookup
 
 **variants**
 
-* `profile:count`
-* `profile:us:count`
-* `profile:ms:count`
-* `profile:s:count`
+* `profile[:time_unit]:count`
 * `profile:hz:rate`
 
 **short name**
@@ -532,8 +523,7 @@ The function arguments are available in the `args` struct which can be inspected
 
 **variants**
 
-* `software:event:`
-* `software:event:count`
+* `software:event[:count]`
 
 **short name**
 
@@ -610,8 +600,8 @@ After the "common" members listed first, the members are specific to the tracepo
 ### uprobe
 
 **variants**
-* `uprobe:binary:func`
-* `uprobe:binary:func+offset`
+* `uprobe:binary:function`
+* `uprobe:binary:function+offset`
 * `uprobe:binary:offset`
 
 **short names**
@@ -691,7 +681,7 @@ fatal error: unknown caller pc
 ### uretprobe
 
 **variants**
-* `uretprobe:binary:func`
+* `uretprobe:binary:function`
 
 **short names**
 * `ur`
