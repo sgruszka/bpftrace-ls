@@ -4,8 +4,7 @@ use std::sync::LazyLock;
 fn test_sudo() -> bool {
     let res = Command::new("sudo")
         .arg("bpftrace")
-        .arg("-e")
-        .arg(r"BEGIN { exit() }")
+        .arg("--help")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();
@@ -17,14 +16,14 @@ fn test_sudo() -> bool {
     false
 }
 
-fn test_debug(use_sudo: bool) -> bool {
-    let mut cmd = if use_sudo {
+fn test_debug() -> bool {
+    let mut cmd = if USE_SUDO.0 {
         Command::new("sudo")
     } else {
         Command::new("bpftrace")
     };
 
-    if use_sudo {
+    if USE_SUDO.0 {
         cmd.arg("bpftrace");
     }
 
@@ -43,27 +42,26 @@ fn test_debug(use_sudo: bool) -> bool {
     false
 }
 
-struct Config {
-    use_sudo: bool,
-    use_dbg_arg: bool,
-}
+struct UseSudo(bool);
+struct UseDbgArg(bool);
 
-impl Config {
+impl UseSudo {
     fn new() -> Self {
-        let use_sudo = test_sudo();
-        let use_dbg_arg = test_debug(use_sudo);
-
-        Config {
-            use_sudo,
-            use_dbg_arg,
-        }
+        UseSudo(test_sudo())
     }
 }
 
-static CONFIG: LazyLock<Config> = LazyLock::new(|| Config::new());
+impl UseDbgArg {
+    fn new() -> Self {
+        UseDbgArg(test_debug())
+    }
+}
+
+static USE_SUDO: LazyLock<UseSudo> = LazyLock::new(|| UseSudo::new());
+static USE_DBG_ARG: LazyLock<UseDbgArg> = LazyLock::new(|| UseDbgArg::new());
 
 pub fn init() {
-    LazyLock::force(&CONFIG);
+    LazyLock::force(&USE_DBG_ARG);
 }
 
 pub fn bpftrace_command() -> Command {
@@ -75,13 +73,13 @@ pub fn bpftrace_command() -> Command {
                 .output()
         }
     */
-    let mut cmd = if CONFIG.use_sudo {
+    let mut cmd = if USE_SUDO.0 {
         Command::new("sudo")
     } else {
         Command::new("bpftrace")
     };
 
-    if CONFIG.use_sudo {
+    if USE_SUDO.0 {
         cmd.arg("bpftrace");
     }
 
@@ -91,7 +89,7 @@ pub fn bpftrace_command() -> Command {
 pub fn bpftrace_debug_command() -> Command {
     let mut cmd = bpftrace_command();
 
-    if CONFIG.use_dbg_arg {
+    if USE_DBG_ARG.0 {
         cmd.arg("-d");
         cmd.arg("all");
     } else {
