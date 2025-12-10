@@ -264,7 +264,7 @@ mod tests {
         assert_eq!(probe.kind(), "probe");
         assert_eq!(probe.child_count(), 3);
         assert_eq!(probe.field_name_for_child(0).unwrap(), "provider");
-        assert_eq!(probe.field_name_for_child(2).unwrap(), "event");
+        assert_eq!(probe.field_name_for_child(2).unwrap(), "function");
     }
 
     #[test]

@@ -7,4 +7,4 @@ edition = "2021"
 btf-rs = "1.1.1"
 json = "0.12.4"
 tree-sitter = "0.25"
-tree-sitter-bpftrace = {git = "https://github.com/sgruszka/tree-sitter-bpftrace.git", branch="build-2025-11-27"}
+tree-sitter-bpftrace = {git = "https://github.com/sgruszka/tree-sitter-bpftrace.git", branch="build-2025-12-10"}
