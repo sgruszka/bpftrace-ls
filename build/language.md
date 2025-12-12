@@ -61,13 +61,21 @@ Most providers also support a short name which can be used instead of the full n
 | [`watchpoint/asyncwatchpoint`](#watchpoint-and-asyncwatchpoint) | `w`/`aw` | Memory watchpoints |
 
 ### begin
+Built-in event
+
+**variants**
 * `begin`
+
 Special built-in event provided by the bpftrace runtime.
 `begin` is triggered before all other probes are attached.
 Can be used any number of times, and they will be executed in the same order they are declared.
 
 ### end
+Built-in event
+
+**variants**
 * `end`
+
 Special built-in event provided by the bpftrace runtime.
 `end` is triggered after all other probes are detached.
 Each of these probes can be used any number of times, and they will be executed in the same order they are declared.
@@ -85,6 +93,9 @@ end {
 ```
 
 ### test
+Built-in event
+
+**variants**
 * `test:name`
 
 `test` is a special built-in probe type for creating tests.
@@ -104,6 +115,9 @@ test:failure {
 ```
 
 ### bench
+Micro benchmarks
+
+**variants**
 * `bench:name`
 
 `bench` is a special built-in probe type for creating micro benchmarks.
@@ -142,9 +156,9 @@ Attached 3 probes
 ```
 
 ### self
+Built-in events
 
 **variants**
-
 * `self:signal:SIGUSR1`
 
 These are special built-in events provided by the bpftrace runtime.
@@ -157,6 +171,7 @@ self:signal:SIGUSR1 {
 ```
 
 ### hardware
+Processor-level events
 
 **variants**
 
@@ -192,6 +207,7 @@ hardware:cache-misses:1e6 { @[pid] = count(); }
 ```
 
 ### interval
+Timed output
 
 **variants**
 
@@ -214,6 +230,7 @@ interval:1s { print(@syscalls); clear(@syscalls); }
 ```
 
 ### iter
+Iterators tracing
 
 **variants**
 
@@ -303,6 +320,10 @@ iter:task_file:/sys/fs/bpf/files {
 ```
 
 ### fentry
+Kernel function entry (tracing with BTF support)
+
+**variants**
+
 * `fentry[:module]:function`
 * `fentry:bpf[:prog_id]:prog_name`
 
@@ -345,6 +366,7 @@ fentry:x86_pmu_stop {
 }
 ```
 ### fexit
+Kernel function exit (tracing with BTF support)
 
 **variants**
 * `fexit[:module]:function`
@@ -374,16 +396,21 @@ fexit:fget {
 ```
 
 ### kfunc
-* `kfunc[:module]:function`
-
 Deprecated alias for `fentry`.
 
-### kretfunc
-* `kretfunc[:module:]function`
+**variants**
+* `kfunc[:module]:function`
 
+### kretfunc
 Deprecated alias for `fexit`.
 
+**variants**
+* `kretfunc[:module:]function`
+
+
 ### kprobe
+Kernel function start
+
 **variants**
 * `kprobe[:module]:function[+offset]`
 **short name**
@@ -449,6 +476,8 @@ See [BTF Support](#btf-support) for more details.
 `kprobe` s are not limited to function entry, they can be attached to any instruction in a function by specifying an offset from the start of the function.
 
 ### kretprobe
+Kernel function return
+
 **variants**
 * `kretprobe[:module]:function`
 **short name**
@@ -474,6 +503,7 @@ kretprobe:d_lookup
 ```
 
 ### profile
+Timed sampling
 
 **variants**
 
@@ -493,6 +523,7 @@ profile:hz:99 { @[tid] = count(); }
 ```
 
 ### rawtracepoint
+Kernel static tracepoints with raw arguments
 
 **variants**
 
@@ -520,6 +551,7 @@ The arguments accessible by a `rawtracepoint` are different from the arguments y
 The function arguments are available in the `args` struct which can be inspected by doing verbose listing (see [Listing Probes](../man/adoc/bpftrace.adoc#listing-probes)).
 
 ### software
+Kernel software events
 
 **variants**
 
@@ -554,6 +586,7 @@ software:faults:100 { @[comm] = count(); }
 This roughly counts who is causing page faults, by sampling the process name for every one in one hundred faults.
 
 ### tracepoint
+Kernel static tracepoints
 
 **variants**
 
@@ -598,6 +631,7 @@ After the "common" members listed first, the members are specific to the tracepo
 * https://www.kernel.org/doc/html/latest/trace/tracepoints.html
 
 ### uprobe
+User-level function start
 
 **variants**
 * `uprobe:binary:function`
@@ -679,21 +713,22 @@ fatal error: unknown caller pc
 ```
 
 ### uretprobe
+User-level function return
 
 **variants**
 * `uretprobe:binary:function`
 
 **short name**
+
 * `ur`
 
 ### usdt
+User-level staticlly defined tracecpoint
 
 **variants**
 
-* `usdt:binary_path:probe_name`
-* `usdt:binary_path:[probe_namespace]:probe_name`
-* `usdt:library_path:probe_name`
-* `usdt:library_path:[probe_namespace]:probe_name`
+* `usdt:binary_path[:probe_namespace]:probe_name`
+* `usdt:library_path[:probe_namespace]:probe_name`
 
 **short name**
 
@@ -734,6 +769,8 @@ This means that if bpftrace runs from the root host, things may not work as expe
 One workaround is to run bpftrace inside the appropriate namespaces (i.e. the container).
 
 ### watchpoint
+Memory watchpoint
+
 **variants**
 * `watchpoint:absolute_address:length:mode`
 * `watchpoint:function+argN:length:mode`
@@ -747,6 +784,7 @@ Whenever a memory address is written to (`w`), read
 from (`r`), or executed (`x`), the kernel can generate an event.
 
 ### asyncwatchpoint
+Memory watchpoint
 
 **variants**
 
