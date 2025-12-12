@@ -824,11 +824,10 @@ mod tests {
     #[test]
     fn test_decode_message() {
         let msg = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"general":{"positionEncodings":["utf-16"]}}}}"#;
+
         let (msg_type, id, method, _content) = decode_message(msg.to_string());
-        match msg_type {
-            LspMessageType::Request => assert!(true),
-            _ => assert!(false),
-        }
+        assert!(matches!(msg_type, LspMessageType::Request));
+
         assert!(id == 1);
         assert!(method == "initialize");
     }
