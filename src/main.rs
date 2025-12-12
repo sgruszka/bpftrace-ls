@@ -635,13 +635,7 @@ fn thread_input(mpsc_tx: mpsc::Sender<MpscMessage>) {
                 let (msg_type, id, method, content) = decode_message(msg);
 
                 let exit: bool = match &msg_type {
-                    LspMessageType::Notification => {
-                        if method == "exit" {
-                            true
-                        } else {
-                            false
-                        }
-                    }
+                    LspMessageType::Notification => method == "exit",
                     _ => false,
                 };
 
