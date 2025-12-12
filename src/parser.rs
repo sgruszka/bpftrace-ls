@@ -216,12 +216,14 @@ fn is_args(line_str: &str, char_nr: usize) -> bool {
 
 pub fn is_argument(line_str: &str, char_nr: usize, args: &mut String) -> bool {
     let mut res = false;
-    if let Some(line_upto_char) = line_str.get(0..=char_nr) {
-        if let Some(last_word) = line_upto_char.rsplit([' ', '{', '(']).next() {
-            if last_word.starts_with("args.") {
-                args.push_str(last_word);
-                res = true;
-            }
+
+    if let Some(last_word) = line_str
+        .get(0..=char_nr)
+        .and_then(|line_upto_char| line_upto_char.rsplit([' ', '{', '(']).next())
+    {
+        if last_word.starts_with("args.") {
+            args.push_str(last_word);
+            res = true;
         }
     }
 
