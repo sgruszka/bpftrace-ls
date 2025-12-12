@@ -1,3 +1,5 @@
+#![allow(clippy::single_char_add_str)]
+
 use json::{self, object};
 
 use std::{

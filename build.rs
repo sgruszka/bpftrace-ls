@@ -1,3 +1,5 @@
+#![allow(clippy::single_char_add_str)]
+
 include!("build/gen.rs");
 
 fn main() {
