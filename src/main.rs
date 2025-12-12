@@ -565,14 +565,13 @@ fn recv_message() -> Result<String, i32> {
     }
 
     let parse_result = header[start_idx..].trim().parse::<usize>();
-    let len: usize;
-    match parse_result {
-        Ok(val) => len = val,
+    let len = match parse_result {
+        Ok(val) => val,
         Err(_) => {
             log_err!("Failed to parse length");
             return Err(-2);
         }
-    }
+    };
     // let mut buf: Vec<u8> = Vec::with_capacity(len);
     let mut buf: Vec<u8> = vec![0; len];
     let mut n_read = 0;
