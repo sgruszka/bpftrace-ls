@@ -1,6 +1,4 @@
 use json::{self, object};
-use tree_sitter;
-use tree_sitter_bpftrace;
 
 use std::{
     collections::HashMap,
