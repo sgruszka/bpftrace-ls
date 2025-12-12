@@ -15,9 +15,9 @@ pub enum SyntaxLocation {
 
 #[derive(PartialEq)]
 enum Position {
-    BEFORE,
-    WITHIN,
-    AFTER,
+    Before,
+    Within,
+    After,
 }
 
 fn postition_relative_to_node(node: &Node, line_nr: usize, char_nr: usize) -> Position {
@@ -25,24 +25,24 @@ fn postition_relative_to_node(node: &Node, line_nr: usize, char_nr: usize) -> Po
     let end = node.end_position();
 
     if line_nr < start.row {
-        return Position::BEFORE;
+        return Position::Before;
     }
     if line_nr > end.row {
-        return Position::AFTER;
+        return Position::After;
     }
     if line_nr == start.row && char_nr < start.column {
-        return Position::BEFORE;
+        return Position::Before;
     }
     if line_nr == end.row && char_nr >= end.column {
-        return Position::AFTER;
+        return Position::After;
     }
 
-    Position::WITHIN
+    Position::Within
 }
 
 fn postion_before_next_sibling(node: &Node, line_nr: usize, char_nr: usize) -> bool {
     if let Some(next_sibling) = node.next_sibling() {
-        if postition_relative_to_node(&next_sibling, line_nr, char_nr) == Position::BEFORE {
+        if postition_relative_to_node(&next_sibling, line_nr, char_nr) == Position::Before {
             return true;
         }
     }
@@ -92,9 +92,9 @@ pub fn find_syntax_location<'t>(
 
             let pos = postition_relative_to_node(&node, line_nr, char_nr);
 
-            if pos == Position::WITHIN {
+            if pos == Position::Within {
                 ret = (node_to_syntax_location(&node), node);
-            } else if pos == Position::BEFORE {
+            } else if pos == Position::Before {
                 break;
             }
 
