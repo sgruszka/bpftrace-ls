@@ -613,7 +613,7 @@ fn recv_message() -> Result<String, i32> {
         Err(e) => log_err!("Failed to convert to string: {}", e),
     }
 
-    return Err(-1);
+    Err(-1)
 }
 
 fn send_message(s: String) {
