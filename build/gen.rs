@@ -9,7 +9,7 @@ struct DocItem {
     full_info: String,
 }
 
-fn add_json_obj(text: &mut String, doc_item: &DocItem) {
+fn add_json_obj(text: &mut String, doc_item: &DocItem, kind: usize) {
     let label = &doc_item.label;
     let detail = if doc_item.variants.is_empty() {
         &doc_item.label
@@ -33,7 +33,7 @@ fn add_json_obj(text: &mut String, doc_item: &DocItem) {
         r##"
     let json_obj = object! {{
         "label": r#"{label}"#,
-        "kind" : 3,
+        "kind" : {kind},
         "detail": r#"{detail}"#,
         "documentation" : {{
             "kind": "markdown",
@@ -77,7 +77,7 @@ pub fn bpftrace_probe_providers(items: &mut json::JsonValue) {
 
         if line.trim().starts_with("### ") {
             if collected_probe {
-                add_json_obj(&mut text, &doc_item);
+                add_json_obj(&mut text, &doc_item, 8);
             }
 
             doc_item = DocItem::default();
@@ -153,7 +153,7 @@ pub fn bpftrace_stdlib_functions(items: &mut json::JsonValue) {
     for line in stdlib_md.lines() {
         if line.trim().starts_with("### ") {
             if collected_item {
-                add_json_obj(&mut text, &doc_item);
+                add_json_obj(&mut text, &doc_item, 3);
             }
 
             doc_item = DocItem::default();
