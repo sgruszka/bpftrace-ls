@@ -503,7 +503,7 @@ fn publish_diagnostics(diag_results: DiagnosticsResutls) -> Option<String> {
 }
 
 fn encode_message(id: u64, method: &str, content: json::JsonValue) -> String {
-    let mut data = match &method[..] {
+    let mut data = match method {
         "initialize" => encode_initalize_result(),
         "shutdown" => encode_shutdown(),
         "textDocument/hover" => completion::encode_hover(content),
