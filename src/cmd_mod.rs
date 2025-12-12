@@ -28,7 +28,7 @@ fn test_debug() -> bool {
     }
 
     let res = cmd
-        .arg("-d all")
+        .args(["-d", "all"])
         .arg("-e")
         .arg(r"BEGIN { exit() }")
         .stdout(Stdio::null())
@@ -57,8 +57,8 @@ impl UseDbgArg {
     }
 }
 
-static USE_SUDO: LazyLock<UseSudo> = LazyLock::new(|| UseSudo::new());
-static USE_DBG_ARG: LazyLock<UseDbgArg> = LazyLock::new(|| UseDbgArg::new());
+static USE_SUDO: LazyLock<UseSudo> = LazyLock::new(UseSudo::new);
+static USE_DBG_ARG: LazyLock<UseDbgArg> = LazyLock::new(UseDbgArg::new);
 
 pub fn init() {
     LazyLock::force(&USE_DBG_ARG);
