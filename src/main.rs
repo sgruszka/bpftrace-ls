@@ -269,7 +269,7 @@ fn encode_code_action(content: json::JsonValue) -> json::JsonValue {
 // stdin:6:60-69: ERROR: str() expects an integer or a pointer type as first argument (struct _tracepoint_syscalls_sys_exit_bpf provided)
 fn bpftrace_diag_single_line_error(
     mut line_nr: usize,
-    tokens: &Vec<&str>,
+    tokens: &[&str],
 ) -> Result<json::JsonValue, std::num::ParseIntError> {
     assert!(tokens.len() > 2);
 
@@ -307,7 +307,7 @@ fn bpftrace_diag_single_line_error(
 // Parse errors with lines range like this:
 // stdin:2-4: ERROR: Invalid probe type: kkprobe
 fn bpftrace_diag_multi_line_error(
-    tokens: &Vec<&str>,
+    tokens: &[&str],
 ) -> Result<json::JsonValue, std::num::ParseIntError> {
     assert!(tokens.len() > 1);
 
@@ -349,7 +349,7 @@ fn bpftrace_diag_multi_line_error(
 // Parse definitions errors:
 // definitions.h:10:18: error: expected ';' at end of declaration list
 fn bpftrace_diag_definitions_error(
-    tokens: &Vec<&str>,
+    tokens: &[&str],
 ) -> Result<json::JsonValue, std::num::ParseIntError> {
     assert!(tokens.len() > 2);
 
