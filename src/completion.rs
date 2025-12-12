@@ -8,8 +8,7 @@ use crate::btf_mod::{
     btf_iterate_over_names_chain, btf_resolve_func, btf_setup_module, ResolvedBtfItem,
 };
 use crate::cmd_mod::bpftrace_command;
-use crate::gen::completion_probes::bpftrace_probe_providers;
-use crate::gen::completion_stdlib::bpftrace_stdlib_functions;
+use crate::gen::completion::{bpftrace_probe_providers, bpftrace_stdlib_functions};
 use crate::log_mod::{self, COMPL, HOVER};
 use crate::parser::{self, SyntaxLocation};
 use crate::DOCUMENTS_STATE;

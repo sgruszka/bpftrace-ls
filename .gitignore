@@ -20,5 +20,4 @@ Cargo.lock
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-src/gen/completion_stdlib.rs
-src/gen/completion_probes.rs
+src/gen/completion.rs

@@ -1,2 +1,1 @@
-pub mod completion_probes;
-pub mod completion_stdlib;
+pub mod completion;
