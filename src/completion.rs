@@ -91,7 +91,7 @@ fn find_probe_for_action(text: &str, line_nr: usize) -> String {
     if let Some(line) = text.lines().nth(line_nr) {
         if let Some(char_nr) = line.find("{") {
             let trimed = line[0..char_nr].trim();
-            if trimed.len() > 0 {
+            if !trimed.is_empty() {
                 return trimed.to_string();
             } else {
                 let prev_line_nr = line_nr - 1;
