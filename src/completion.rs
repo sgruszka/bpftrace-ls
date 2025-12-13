@@ -603,7 +603,7 @@ where
                 break;
             }
         }
-        if found == "" && l < r {
+        if found.is_empty() && l < r {
             found = &line[l..r];
         }
     }
