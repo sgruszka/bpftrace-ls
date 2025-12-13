@@ -322,17 +322,20 @@ fn func_proto_str(item: &ResolvedBtfItem) -> String {
 }
 
 pub fn init_available_traces() {
-    if let Some(_traces) = AVAILABE_TRACES.get() {
+    if AVAILABE_TRACES.get().is_some() {
         return;
-    } else {
-        if let Ok(output) = bpftrace_command().arg("-l").output() {
-            if let Ok(traces) = String::from_utf8(output.stdout) {
-                let _ = AVAILABE_TRACES.set(traces);
-                //available_traces = AVAILABE_TRACES.get().unwrap();
-                log_dbg!(COMPL, "Initalized available traces");
-            }
-        }
     }
+
+    let Ok(output) = bpftrace_command().arg("-l").output() else {
+        return;
+    };
+
+    let Ok(traces) = String::from_utf8(output.stdout) else {
+        return;
+    };
+
+    let _ = AVAILABE_TRACES.set(traces);
+    log_dbg!(COMPL, "Initalized available traces");
 }
 
 fn encode_completion_for_line(prefix: &str, line_str: &str) -> Option<json::JsonValue> {
