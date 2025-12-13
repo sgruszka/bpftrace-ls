@@ -79,7 +79,7 @@ fn argument_next_item(
     let module_btf_map = MODULE_BTF_MAP.lock().unwrap();
 
     if let Some(btf) = module_btf_map.get(&module) {
-        if let Some(resolved) = btf_iterate_over_names_chain(&btf, &resolved_func, this_argument) {
+        if let Some(resolved) = btf_iterate_over_names_chain(btf, &resolved_func, this_argument) {
             return resolved;
         }
     }
@@ -179,7 +179,7 @@ fn find_kfunc_args_by_btf(kfunc: &str) -> Option<(String, ResolvedBtfItem)> {
         }
     }
 
-    if let Some(ret) = btf_resolve_func(&this_btf, kfunc_vec[2]) {
+    if let Some(ret) = btf_resolve_func(this_btf, kfunc_vec[2]) {
         return Some((module.to_string(), ret));
     }
 
@@ -336,7 +336,7 @@ pub fn init_available_traces() {
 }
 
 fn encode_completion_for_line(prefix: &str, line_str: &str) -> Option<json::JsonValue> {
-    if !line_str.trim().starts_with(&prefix) {
+    if !line_str.trim().starts_with(prefix) {
         return None;
     }
 
@@ -412,7 +412,7 @@ fn encode_completion_for_line(prefix: &str, line_str: &str) -> Option<json::Json
                 };
 
                 if trace_tokens[0] == "kfunc" && kind == 3 {
-                    if let Some((_module, resolved_btf)) = find_kfunc_args_by_btf(&trace_line) {
+                    if let Some((_module, resolved_btf)) = find_kfunc_args_by_btf(trace_line) {
                         item["detail"] = func_proto_str(&resolved_btf).into();
                     }
                 }
@@ -657,8 +657,8 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
                   },
             };
         }
-    } else if parser::is_action_block(&text, line_nr, char_nr) {
-        let probe = find_probe_for_action(&text, line_nr);
+    } else if parser::is_action_block(text, line_nr, char_nr) {
+        let probe = find_probe_for_action(text, line_nr);
         let probe_args = find_probe_args_by_command(&probe);
         log_dbg!(HOVER, "Probe {} with args:\n{}", probe, probe_args);
 
