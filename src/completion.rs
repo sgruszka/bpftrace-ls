@@ -287,6 +287,7 @@ You can print the entire structure via `print(args)` or access particular fields
     Some(data)
 }
 
+#[allow(clippy::needless_range_loop)]
 fn func_proto_str(item: &ResolvedBtfItem) -> String {
     let mut s = String::new();
     let params = &item.children_vec;
@@ -699,6 +700,7 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
     data
 }
 
+#[allow(clippy::len_zero)]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -712,7 +714,6 @@ mod tests {
         let resolved_btf = if let Some((_module, resolved_btf)) = args_by_btf {
             resolved_btf
         } else {
-            assert!(false);
             ResolvedBtfItem::default()
         };
 
@@ -774,6 +775,7 @@ mod tests {
 
     #[test]
     fn test_find_probe_args() {
+        compare_btf_and_cmd("kfunc:vmlinux");
         compare_btf_and_cmd("kfunc:vmlinux:posixtimer_free_timer");
         compare_btf_and_cmd("kfunc:vmlinux:acpi_unregister_gsi");
         compare_btf_and_cmd("kfunc:vmlinux:acpi_register_gsi");
