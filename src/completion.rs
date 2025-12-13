@@ -363,7 +363,7 @@ fn encode_completion_for_line(prefix: &str, line_str: &str) -> Option<json::Json
     let mut is_incomplete = false;
 
     let max_count = 200;
-    let mut count = max_count as i32;
+    let mut count = max_count;
     let mut duplicates: HashMap<String, u32> = HashMap::new();
 
     let mut line_tokens: Vec<&str> = line_str.split(":").collect();
