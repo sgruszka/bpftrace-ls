@@ -914,4 +914,45 @@ mod tests {
         let fields = vec!["retval", "tp", "clock"];
         check_completion_resutls(result, fields);
     }
+
+    #[test]
+    fn test_modules_completion_for_short_tracepoint() {
+        let text = r#"t:"#;
+        let json_content = completion_setup(text, 0, text.len());
+
+        let result = encode_completion(json_content);
+        assert!(result["result"]["items"].len() > 0);
+
+        let fields = vec![
+            "vmalloc",
+            "syscalls",
+            "timer",
+            "notifier",
+            "workqueue",
+            "writeback",
+            "dma",
+        ];
+        check_completion_resutls(result, fields);
+    }
+
+    #[test]
+    fn test_modules_completion_for_short_clk() {
+        let text = r#"t:clk:"#;
+        let json_content = completion_setup(text, 0, text.len());
+
+        let result = encode_completion(json_content);
+        assert!(result["result"]["items"].len() > 0);
+
+        let fields = vec![
+            "clk_disable",
+            "clk_disable_complete",
+            "clk_enable",
+            "clk_enable_complete",
+            "clk_prepare",
+            "clk_prepare_complete",
+            "clk_set_max_rate",
+            "clk_set_min_rate",
+        ];
+        check_completion_resutls(result, fields);
+    }
 }
