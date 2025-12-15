@@ -120,6 +120,41 @@ pub fn find_syntax_location<'t>(
     (SyntaxLocation::SourceFile, tree.root_node())
 }
 
+pub fn find_error_location<'t>(
+    text: &str,
+    tree: &'t Tree,
+    line_nr: usize,
+    char_nr: usize,
+) -> Option<Node<'t>> {
+    let query_str = r#"
+    [
+        (ERROR) @ERROR
+    ]
+    "#;
+
+    let query = Query::new(&tree_sitter_bpftrace::LANGUAGE.into(), query_str)
+        .expect("Error creating query"); // TODO
+
+    let mut query_cursor = QueryCursor::new();
+    let mut matches = query_cursor.matches(&query, tree.root_node(), text.as_bytes());
+
+    while let Some(m) = matches.next() {
+        for cap in m.captures {
+            let node = cap.node;
+
+            let pos = postition_relative_to_node(&node, line_nr, char_nr);
+
+            if pos == Position::Within {
+                return Some(node);
+            } else if pos == Position::Before {
+                break;
+            }
+        }
+    }
+
+    None
+}
+
 pub fn find_probe_for_action(action: &Node, text: &str) -> String {
     assert_eq!(action.kind(), "action");
 
@@ -137,6 +172,28 @@ pub fn find_probe_for_action(action: &Node, text: &str) -> String {
 
     //"".to_string()
     probe_text.unwrap().to_string()
+}
+
+pub fn find_probe_for_error(error_node: &Node, text: &str) -> String {
+    assert_eq!(error_node.kind(), "ERROR");
+    let mut probe_str = "".to_string();
+
+    let mut cursor = error_node.walk();
+    for child_node in error_node.children(&mut cursor) {
+        let probe;
+        if child_node.kind() == "probes_list" {
+            probe = child_node.child(0).unwrap();
+        } else if child_node.kind() == "probe" {
+            probe = child_node;
+        } else {
+            continue;
+        }
+
+        let probe_text = probe.utf8_text(text.as_bytes());
+        probe_str = probe_text.unwrap().to_string();
+    }
+
+    probe_str
 }
 
 pub fn find_location(tree: &Tree, line_nr: usize, char_nr: usize) -> SyntaxLocation {

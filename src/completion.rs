@@ -10,7 +10,7 @@ use crate::btf_mod::{
 use crate::cmd_mod::bpftrace_command;
 use crate::gen::completion::{bpftrace_probe_providers, bpftrace_stdlib_functions};
 use crate::log_mod::{self, COMPL, HOVER};
-use crate::parser::{self, SyntaxLocation};
+use crate::parser::{self, find_error_location, SyntaxLocation};
 use crate::DOCUMENTS_STATE;
 use crate::{log_dbg, log_err, log_vdbg};
 use btf_rs::Btf;
@@ -607,6 +607,21 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
         }
     }
 
+    if loc == SyntaxLocation::SourceFile && node.has_error() {
+        if let Some(args) = parser::is_argument(&line_str, char_nr) {
+            if let Some(error_node) = find_error_location(text, tree, line_nr, char_nr) {
+                let probe = parser::find_probe_for_error(&error_node, text);
+                if !probe.is_empty() {
+                    log_dbg!(COMPL, "Found probe {}", probe);
+
+                    if let Some(data) = encode_completion_for_args_keyword(&probe, &args) {
+                        return data;
+                    }
+                }
+            }
+        }
+    }
+
     if loc != SyntaxLocation::Comment {
         let up_to_char = char_nr.saturating_add(1);
         let line_head = if let Some(splited_line) = line_str.split_at_checked(up_to_char) {
@@ -979,7 +994,7 @@ mod tests {
     #[test]
     fn test_missing_right_bracket_action() {
         let text = r#"t:syscalls:sys_enter_bpf { args."#;
-        let json_content = completion_setup(text, 0, text.len() - 1);
+        let json_content = completion_setup(text, 0, text.len());
         let result = encode_completion(json_content);
         assert!(result["result"]["items"].len() > 0);
 
