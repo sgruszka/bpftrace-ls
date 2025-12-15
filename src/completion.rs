@@ -186,6 +186,73 @@ fn find_kfunc_args_by_btf(kfunc: &str) -> Option<(String, ResolvedBtfItem)> {
     None
 }
 
+fn encode_completion_for_args_keyword(
+    _text: &str,
+    _node: &Node,
+    probe: &str,
+    this_argument: &str,
+    items: &mut json::JsonValue,
+) {
+    log_dbg!(COMPL, "Complete for argument: {}", this_argument);
+
+    let mut is_kfunc = false;
+    if probe.starts_with("kprobe:")
+        || probe.starts_with("kretprobe:")
+        || probe.starts_with("kfunc:")
+        || probe.starts_with("kretfunc:")
+        || probe.starts_with("fentry")
+        || probe.starts_with("fexit")
+    {
+        is_kfunc = true;
+    }
+
+    let mut btf_probe_args = None;
+    if is_kfunc {
+        let kfunc = kprobe_to_kfunc(&probe);
+        btf_probe_args = find_kfunc_args_by_btf(&kfunc);
+    }
+
+    let mut args_as_string = String::new();
+    let mut probe_args_iter: Lines = "".lines();
+    let probe_args;
+
+    if this_argument.ends_with("args.") && !is_kfunc {
+        probe_args = find_probe_args_by_command(&probe);
+        probe_args_iter = probe_args.lines();
+        // On first line of probe args is kfunc module and name
+        probe_args_iter.next();
+    } else if let Some((module, resolved_btf)) = btf_probe_args {
+        // Complete args. i.e. kfunc:xe:__fini_dbm { printf("%s\n", str(args.drm->driver->name)) }
+        let arg_btf = argument_next_item(module, resolved_btf, &this_argument);
+        let args = children_to_vec_str(&arg_btf);
+
+        args_as_string.push_str(&args.join("\n"));
+        probe_args_iter = args_as_string.lines();
+
+        log_dbg!(COMPL, "Found arguments using btf:\n{}", args_as_string);
+    }
+
+    for arg in probe_args_iter {
+        let tokens: Vec<&str> = arg.split(" ").collect();
+        if tokens.len() <= 1 {
+            continue;
+        }
+        let end = tokens.len() - 1;
+
+        // let field = format!("args.{}", tokens[end]);
+        let field = tokens[end];
+        let _field_type = tokens[0..end].join(" ").to_string();
+        let completion = object! {
+            "label": field,
+            "kind" : 5,
+            "detail" : arg, //field_type.clone(),
+            // TODO
+            // "documentation" : field_type,
+        };
+        let _ = items.push(completion);
+    }
+}
+
 fn encode_completion_for_action(
     text: &str,
     node: &Node,
@@ -197,71 +264,14 @@ fn encode_completion_for_action(
     let mut items = json::JsonValue::new_array();
     let is_incomplete = false; // Currently we provide complete list
 
-    let probe = parser::find_probe_for_action(node, text);
-    if !probe.is_empty() {
-        log_dbg!(COMPL, "Found probe {}", probe);
-    }
-
-    let mut this_argument = String::new();
-    if parser::is_argument(line_str, char_nr, &mut this_argument) {
-        log_dbg!(COMPL, "Complete for argument: {}", this_argument);
-
-        let mut is_kfunc = false;
-        if probe.starts_with("kprobe:")
-            || probe.starts_with("kretprobe:")
-            || probe.starts_with("kfunc:")
-            || probe.starts_with("kretfunc:")
-            || probe.starts_with("fentry")
-            || probe.starts_with("fexit")
-        {
-            is_kfunc = true;
+    let mut args = String::new();
+    if parser::is_argument(line_str, char_nr, &mut args) {
+        let probe = parser::find_probe_for_action(node, text);
+        if !probe.is_empty() {
+            log_dbg!(COMPL, "Found probe {}", probe);
         }
 
-        let mut btf_probe_args = None;
-        if is_kfunc {
-            let kfunc = kprobe_to_kfunc(&probe);
-            btf_probe_args = find_kfunc_args_by_btf(&kfunc);
-        }
-
-        let mut args_as_string = String::new();
-        let mut probe_args_iter: Lines = "".lines();
-        let probe_args;
-
-        if this_argument.ends_with("args.") && !is_kfunc {
-            probe_args = find_probe_args_by_command(&probe);
-            probe_args_iter = probe_args.lines();
-            // On first line of probe args is kfunc module and name
-            probe_args_iter.next();
-        } else if let Some((module, resolved_btf)) = btf_probe_args {
-            // Complete args. i.e. kfunc:xe:__fini_dbm { printf("%s\n", str(args.drm->driver->name)) }
-            let arg_btf = argument_next_item(module, resolved_btf, &this_argument);
-            let args = children_to_vec_str(&arg_btf);
-
-            args_as_string.push_str(&args.join("\n"));
-            probe_args_iter = args_as_string.lines();
-
-            log_dbg!(COMPL, "Found arguments using btf:\n{}", args_as_string);
-        }
-
-        for arg in probe_args_iter {
-            let tokens: Vec<&str> = arg.split(" ").collect();
-            if tokens.len() <= 1 {
-                continue;
-            }
-            let end = tokens.len() - 1;
-
-            // let field = format!("args.{}", tokens[end]);
-            let field = tokens[end];
-            let _field_type = tokens[0..end].join(" ").to_string();
-            let completion = object! {
-                "label": field,
-                "kind" : 5,
-                "detail" : arg, //field_type.clone(),
-                // TODO
-                // "documentation" : field_type,
-            };
-            let _ = items.push(completion);
-        }
+        encode_completion_for_args_keyword(text, node, &probe, &args, &mut items);
     } else {
         // TODO preload btf module
         bpftrace_stdlib_functions(&mut items);
