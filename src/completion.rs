@@ -339,12 +339,17 @@ pub fn init_available_traces() {
     log_dbg!(COMPL, "Initalized available traces");
 }
 
-fn encode_completion_for_line(prefix: &str, line_str: &str) -> Option<json::JsonValue> {
-    if !line_str.trim().starts_with(prefix) {
-        return None;
-    }
-
-    log_dbg!(COMPL, "Check completion for prefix {}", prefix);
+fn encode_completion_for_line(
+    prefix: &str,
+    line_str: &str,
+    short_prefix: Option<&str>,
+) -> Option<json::JsonValue> {
+    log_dbg!(
+        COMPL,
+        "Check completion for prefix '{}' with short name {:?}",
+        prefix,
+        short_prefix
+    );
 
     // TOOD separate traces for each type i.e. kprobe, tracepoint
     // TODO add kretprobe, kretfunc support
@@ -371,14 +376,22 @@ fn encode_completion_for_line(prefix: &str, line_str: &str) -> Option<json::Json
     let mut duplicates: HashMap<String, u32> = HashMap::new();
 
     let mut line_tokens: Vec<&str> = line_str.split(":").collect();
-    if line_str.trim().starts_with("kretfunc")
-        || line_str.trim().starts_with("kretprobe")
-        || line_str.trim().starts_with("fexit")
-        || line_str.trim().starts_with("fentry")
+
+    if let Some(short_name) = short_prefix {
+        assert!(line_str.trim().starts_with(short_name));
+        line_tokens[0] = prefix;
+    }
+
+    if line_tokens[0] == "kretprobe"
+        || line_tokens[0] == "kretfunc"
+        || line_tokens[0] == "fentry"
+        || line_tokens[0] == "fexit"
     {
         line_tokens[0] = "kfunc";
     }
+
     let search_line = line_tokens.join(":");
+    log_dbg!(COMPL, "Searching for line '{}'", search_line);
 
     for trace_line in available_traces.lines() {
         if trace_line.trim().starts_with(search_line.trim()) {
@@ -477,29 +490,52 @@ fn encode_no_completion() -> json::JsonValue {
 
 fn encode_completion_for_probes(line_str: &str) -> json::JsonValue {
     let prefixes = [
-        "begin",
-        "end",
-        "test",
-        "bench",
-        "self",
-        "interval",
-        "profile",
-        "iter",
-        "hardware",
-        "software",
-        "rawtracepoint",
-        "tracepoint",
-        "kprobe",
-        "kretprobe",
-        "kfunc",
-        "kretfunc",
-        "fentry",
-        "fexit",
+        ("begin", None),
+        ("end", None),
+        ("test", None),
+        ("bench", None),
+        ("self", None),
+        ("interval", Some("i")),
+        ("profile", Some("p")),
+        ("iter", Some("it")),
+        ("hardware", Some("h")),
+        ("software", Some("s")),
+        ("rawtracepoint", Some("rt")),
+        ("tracepoint", Some("t")),
+        ("kprobe", Some("k")),
+        ("kretprobe", Some("kr")),
+        ("kfunc", None),
+        ("kretfunc", None),
+        ("fentry", Some("f")),
+        ("fexit", Some("fr")),
     ];
 
     if !line_str.is_empty() {
         for prefix in prefixes.iter() {
-            if let Some(data) = encode_completion_for_line(prefix, line_str) {
+            if !line_str.trim().starts_with(prefix.0) {
+                continue;
+            }
+            if let Some(data) = encode_completion_for_line(prefix.0, line_str, None) {
+                return data;
+            }
+        }
+
+        for prefix in prefixes.iter() {
+            let Some(short_prefix) = prefix.1 else {
+                continue;
+            };
+
+            if line_str.trim().len() <= short_prefix.len()
+                || line_str.trim().chars().nth(short_prefix.len()) != Some(':')
+            {
+                continue;
+            }
+
+            if !line_str.trim().starts_with(short_prefix) {
+                continue;
+            }
+
+            if let Some(data) = encode_completion_for_line(prefix.0, line_str, prefix.1) {
                 return data;
             }
         }
