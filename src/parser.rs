@@ -214,20 +214,17 @@ fn is_args(line_str: &str, char_nr: usize) -> bool {
 }
 */
 
-pub fn is_argument(line_str: &str, char_nr: usize, args: &mut String) -> bool {
-    let mut res = false;
-
+pub fn is_argument(line_str: &str, char_nr: usize) -> Option<String> {
     if let Some(last_word) = line_str
         .get(0..=char_nr)
         .and_then(|line_upto_char| line_upto_char.rsplit([' ', '{', '(']).next())
     {
         if last_word.starts_with("args.") {
-            args.push_str(last_word);
-            res = true;
+            return Some(last_word.to_string());
         }
     }
 
-    res
+    None
 }
 
 #[cfg(test)]

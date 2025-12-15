@@ -188,8 +188,6 @@ fn find_kfunc_args_by_btf(kfunc: &str) -> Option<(String, ResolvedBtfItem)> {
 
 // Complete args. i.e. kfunc:xe:__fini_dbm { printf("%s\n", str(args.drm->driver->name)) }
 fn encode_completion_for_args_keyword(
-    _text: &str,
-    _node: &Node,
     probe: &str,
     args_with_fields: &str,
 ) -> Option<json::JsonValue> {
@@ -265,46 +263,36 @@ fn encode_completion_for_args_keyword(
 }
 
 fn encode_completion_for_action(
-    text: &str,
-    node: &Node,
-    line_str: &str,
-    char_nr: usize,
+    _text: &str,
+    _node: &Node,
+    _line_str: &str,
+    _char_nr: usize,
 ) -> Option<json::JsonValue> {
     log_dbg!(COMPL, "Complete for action block");
 
-    let mut args = String::new();
-    if parser::is_argument(line_str, char_nr, &mut args) {
-        let probe = parser::find_probe_for_action(node, text);
-        if !probe.is_empty() {
-            log_dbg!(COMPL, "Found probe {}", probe);
-        }
+    // TODO preload btf module
+    let mut items = json::JsonValue::new_array();
 
-        encode_completion_for_args_keyword(text, node, &probe, &args)
-    } else {
-        // TODO preload btf module
-        let mut items = json::JsonValue::new_array();
+    bpftrace_stdlib_functions(&mut items);
 
-        bpftrace_stdlib_functions(&mut items);
-
-        let completion_args = object! {
-            "label": "args",
-            "kind" : 5,
-            "detail" : "args",
-            "documentation" : r#"
+    let completion_args = object! {
+        "label": "args",
+        "kind" : 5,
+        "detail" : "args",
+        "documentation" : r#"
 This keyword represents the struct of all arguments of the traced function.
 You can print the entire structure via `print(args)` or access particular fields using the dot syntax, e.g., `$x = str(args.filename);`. "#,
-        };
-        let _ = items.push(completion_args);
-        let is_incomplete = false; // Currently we provide complete list
-        let data = object! {
-            "result": {
-                "isIncomplete": is_incomplete,
-                "items": items,
-            }
-        };
+    };
+    let _ = items.push(completion_args);
+    let is_incomplete = false; // Currently we provide complete list
+    let data = object! {
+        "result": {
+            "isIncomplete": is_incomplete,
+            "items": items,
+        }
+    };
 
-        Some(data)
-    }
+    Some(data)
 }
 
 #[allow(clippy::needless_range_loop)]
@@ -564,6 +552,7 @@ fn encode_completion_for_probes(line_str: &str) -> json::JsonValue {
     encode_completion_for_empty_line()
 }
 
+#[allow(clippy::collapsible_else_if)]
 pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     let uri = &content["params"]["textDocument"]["uri"].to_string();
 
@@ -602,8 +591,19 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     );
 
     if loc == SyntaxLocation::Action {
-        if let Some(data) = encode_completion_for_action(text, &node, &line_str, char_nr) {
-            return data;
+        if let Some(args) = parser::is_argument(&line_str, char_nr) {
+            let probe = parser::find_probe_for_action(&node, text);
+            if !probe.is_empty() {
+                log_dbg!(COMPL, "Found probe {}", probe);
+
+                if let Some(data) = encode_completion_for_args_keyword(&probe, &args) {
+                    return data;
+                }
+            }
+        } else {
+            if let Some(data) = encode_completion_for_action(text, &node, &line_str, char_nr) {
+                return data;
+            }
         }
     }
 
