@@ -1001,4 +1001,14 @@ mod tests {
         let fields = vec!["size", "cmd", "uattr"];
         check_completion_resutls(result, fields);
     }
+    #[test]
+    fn test_missing_left_bracket_action() {
+        let text = r#"t:syscalls:sys_enter_bpf args. }"#;
+        let json_content = completion_setup(text, 0, text.len() - 2);
+        let result = encode_completion(json_content);
+        assert!(result["result"]["items"].len() > 0);
+
+        let fields = vec!["size", "cmd", "uattr"];
+        check_completion_resutls(result, fields);
+    }
 }
