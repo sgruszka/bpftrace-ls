@@ -186,14 +186,14 @@ fn find_kfunc_args_by_btf(kfunc: &str) -> Option<(String, ResolvedBtfItem)> {
     None
 }
 
+// Complete args. i.e. kfunc:xe:__fini_dbm { printf("%s\n", str(args.drm->driver->name)) }
 fn encode_completion_for_args_keyword(
     _text: &str,
     _node: &Node,
     probe: &str,
-    this_argument: &str,
-    items: &mut json::JsonValue,
-) {
-    log_dbg!(COMPL, "Complete for argument: {}", this_argument);
+    args_with_fields: &str,
+) -> Option<json::JsonValue> {
+    log_dbg!(COMPL, "Complete for argument: {}", args_with_fields);
 
     let mut is_kfunc = false;
     if probe.starts_with("kprobe:")
@@ -208,7 +208,7 @@ fn encode_completion_for_args_keyword(
 
     let mut btf_probe_args = None;
     if is_kfunc {
-        let kfunc = kprobe_to_kfunc(&probe);
+        let kfunc = kprobe_to_kfunc(probe);
         btf_probe_args = find_kfunc_args_by_btf(&kfunc);
     }
 
@@ -216,14 +216,13 @@ fn encode_completion_for_args_keyword(
     let mut probe_args_iter: Lines = "".lines();
     let probe_args;
 
-    if this_argument.ends_with("args.") && !is_kfunc {
-        probe_args = find_probe_args_by_command(&probe);
+    if args_with_fields.ends_with("args.") && !is_kfunc {
+        probe_args = find_probe_args_by_command(probe);
         probe_args_iter = probe_args.lines();
         // On first line of probe args is kfunc module and name
         probe_args_iter.next();
     } else if let Some((module, resolved_btf)) = btf_probe_args {
-        // Complete args. i.e. kfunc:xe:__fini_dbm { printf("%s\n", str(args.drm->driver->name)) }
-        let arg_btf = argument_next_item(module, resolved_btf, &this_argument);
+        let arg_btf = argument_next_item(module, resolved_btf, args_with_fields);
         let args = children_to_vec_str(&arg_btf);
 
         args_as_string.push_str(&args.join("\n"));
@@ -231,6 +230,8 @@ fn encode_completion_for_args_keyword(
 
         log_dbg!(COMPL, "Found arguments using btf:\n{}", args_as_string);
     }
+
+    let mut items = json::JsonValue::new_array();
 
     for arg in probe_args_iter {
         let tokens: Vec<&str> = arg.split(" ").collect();
@@ -251,6 +252,16 @@ fn encode_completion_for_args_keyword(
         };
         let _ = items.push(completion);
     }
+
+    let is_incomplete = false; // Currently we provide complete list
+    let data = object! {
+        "result": {
+            "isIncomplete": is_incomplete,
+            "items": items,
+        }
+    };
+
+    Some(data)
 }
 
 fn encode_completion_for_action(
@@ -261,9 +272,6 @@ fn encode_completion_for_action(
 ) -> Option<json::JsonValue> {
     log_dbg!(COMPL, "Complete for action block");
 
-    let mut items = json::JsonValue::new_array();
-    let is_incomplete = false; // Currently we provide complete list
-
     let mut args = String::new();
     if parser::is_argument(line_str, char_nr, &mut args) {
         let probe = parser::find_probe_for_action(node, text);
@@ -271,9 +279,11 @@ fn encode_completion_for_action(
             log_dbg!(COMPL, "Found probe {}", probe);
         }
 
-        encode_completion_for_args_keyword(text, node, &probe, &args, &mut items);
+        encode_completion_for_args_keyword(text, node, &probe, &args)
     } else {
         // TODO preload btf module
+        let mut items = json::JsonValue::new_array();
+
         bpftrace_stdlib_functions(&mut items);
 
         let completion_args = object! {
@@ -285,16 +295,16 @@ This keyword represents the struct of all arguments of the traced function.
 You can print the entire structure via `print(args)` or access particular fields using the dot syntax, e.g., `$x = str(args.filename);`. "#,
         };
         let _ = items.push(completion_args);
+        let is_incomplete = false; // Currently we provide complete list
+        let data = object! {
+            "result": {
+                "isIncomplete": is_incomplete,
+                "items": items,
+            }
+        };
+
+        Some(data)
     }
-
-    let data = object! {
-        "result": {
-            "isIncomplete": is_incomplete,
-            "items": items,
-        }
-    };
-
-    Some(data)
 }
 
 #[allow(clippy::needless_range_loop)]
