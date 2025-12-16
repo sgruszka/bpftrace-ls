@@ -21,7 +21,7 @@ static PROBES_ARGS_MAP: LazyLock<Mutex<HashMap<String, String>>> =
 static MODULE_BTF_MAP: LazyLock<Mutex<HashMap<String, Btf>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-static AVAILABE_TRACES: OnceLock<String> = OnceLock::new();
+static AVAILABE_TRACES: OnceLock<Option<String>> = OnceLock::new();
 
 fn text_get_line(text: &str, line_nr: usize) -> String {
     let mut from_line = String::new();
@@ -330,20 +330,22 @@ fn func_proto_str(item: &ResolvedBtfItem) -> String {
     s
 }
 
-pub fn init_available_traces() {
-    if AVAILABE_TRACES.get().is_some() {
-        return;
-    }
-
+fn bpftrace_get_traces_list() -> Option<String> {
     let Ok(output) = bpftrace_command().arg("-l").output() else {
-        return;
+        return None;
     };
 
     let Ok(traces) = String::from_utf8(output.stdout) else {
-        return;
+        return None;
     };
 
-    let _ = AVAILABE_TRACES.set(traces);
+    log_vdbg!(COMPL, "List of available traces: \n{traces}\n");
+    Some(traces)
+}
+
+pub fn init_available_traces() {
+    let _ = AVAILABE_TRACES.get_or_init(bpftrace_get_traces_list);
+
     log_dbg!(COMPL, "Initalized available traces");
 }
 
@@ -361,20 +363,9 @@ fn encode_completion_for_line(
 
     // TOOD separate traces for each type i.e. kprobe, tracepoint
     // TODO add kretprobe, kretfunc support
-    let available_traces;
-    if let Some(traces) = AVAILABE_TRACES.get() {
-        available_traces = traces;
-    } else if let Ok(output) = bpftrace_command().arg("-l").output() {
-        if let Ok(traces) = String::from_utf8(output.stdout) {
-            let _ = AVAILABE_TRACES.set(traces);
-            available_traces = AVAILABE_TRACES.get().unwrap();
-            log_vdbg!(COMPL, "List of available traces: \n{available_traces}\n");
-        } else {
-            return Some(encode_no_completion());
-        }
-    } else {
+    let Some(available_traces) = AVAILABE_TRACES.get_or_init(bpftrace_get_traces_list) else {
         return Some(encode_no_completion());
-    }
+    };
 
     let mut items = json::JsonValue::new_array();
     let mut is_incomplete = false;
