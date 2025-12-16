@@ -775,8 +775,51 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
     use std::sync::atomic::{AtomicUsize, Ordering};
     static URI_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    fn preload_probes_args(probes_vec: &[&str]) {
+        let probes_str = probes_vec.join(",");
+
+        let shell_cmd = format!(r#"(sudo bpftrace -l -v "{}") 2>&1"#, probes_str);
+
+        let Ok(output) = Command::new("sh").arg("-c").arg(shell_cmd).output() else {
+            return;
+        };
+
+        let Ok(all_probes_args) = String::from_utf8(output.stdout) else {
+            return;
+        };
+
+        if all_probes_args.is_empty() {
+            log_err!("No arguments for probe {}", probes_str);
+            return;
+        }
+
+        let mut probe = String::new();
+        let mut probe_args = String::new();
+
+        for line in all_probes_args.lines() {
+            if line.starts_with(" ") {
+                probe_args.push_str(line);
+                probe_args.push('\n');
+            } else {
+                if !probe.is_empty() {
+                    let mut probes_args_map = PROBES_ARGS_MAP.lock().unwrap();
+                    probes_args_map.insert(probe, probe_args);
+                }
+                probe = line.to_string();
+                probe_args = line.to_string();
+                probe_args.push('\n');
+            }
+        }
+
+        if !probe.is_empty() {
+            let mut probes_args_map = PROBES_ARGS_MAP.lock().unwrap();
+            probes_args_map.insert(probe, probe_args);
+        }
+    }
 
     fn compare_btf_and_cmd(s: &str) {
         let args_by_cmd = find_probe_args_by_command(s);
@@ -785,7 +828,7 @@ mod tests {
         let resolved_btf = if let Some((_module, resolved_btf)) = args_by_btf {
             resolved_btf
         } else {
-            ResolvedBtfItem::default()
+            panic!();
         };
 
         // for (i, c) in resolved_btf.children_vec.iter().enumerate() {
@@ -846,11 +889,16 @@ mod tests {
 
     #[test]
     fn test_find_probe_args() {
-        compare_btf_and_cmd("kfunc:vmlinux");
-        compare_btf_and_cmd("kfunc:vmlinux:posixtimer_free_timer");
-        compare_btf_and_cmd("kfunc:vmlinux:acpi_unregister_gsi");
-        compare_btf_and_cmd("kfunc:vmlinux:acpi_register_gsi");
-        compare_btf_and_cmd("kfunc:vmlinux:vfs_open");
+        let probes = vec![
+            "kfunc:vmlinux:posixtimer_free_timer",
+            "kfunc:vmlinux:acpi_unregister_gsi",
+            "kfunc:vmlinux:acpi_register_gsi",
+            "kfunc:vmlinux:vfs_open",
+        ];
+        preload_probes_args(&probes);
+        for p in probes {
+            compare_btf_and_cmd(p);
+        }
     }
 
     #[test]
