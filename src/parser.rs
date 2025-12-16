@@ -86,7 +86,7 @@ pub fn find_syntax_location<'t>(
     let mut ret = (SyntaxLocation::SourceFile, tree.root_node());
     let mut current_node: Option<Node> = None;
 
-    while let Some(m) = matches.next() {
+    'matches_loop: while let Some(m) = matches.next() {
         for cap in m.captures {
             let node = cap.node;
 
@@ -95,7 +95,7 @@ pub fn find_syntax_location<'t>(
             if pos == Position::Within {
                 ret = (node_to_syntax_location(&node), node);
             } else if pos == Position::Before {
-                break;
+                break 'matches_loop;
             }
 
             current_node = Some(node);
@@ -138,7 +138,7 @@ pub fn find_error_location<'t>(
     let mut query_cursor = QueryCursor::new();
     let mut matches = query_cursor.matches(&query, tree.root_node(), text.as_bytes());
 
-    while let Some(m) = matches.next() {
+    'matches_loop: while let Some(m) = matches.next() {
         for cap in m.captures {
             let node = cap.node;
 
@@ -147,7 +147,7 @@ pub fn find_error_location<'t>(
             if pos == Position::Within {
                 return Some(node);
             } else if pos == Position::Before {
-                break;
+                break 'matches_loop;
             }
         }
     }
