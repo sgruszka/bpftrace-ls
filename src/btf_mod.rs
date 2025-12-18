@@ -270,7 +270,12 @@ fn resolve_type_id(btf: &Btf, id: u32, param_item: &mut ResolvedBtfItem) {
     }
 }
 
-fn resolve_func_parameters(btf: &Btf, func: btf::Func, item: &mut ResolvedBtfItem) {
+fn resolve_func_parameters(
+    btf: &Btf,
+    func: btf::Func,
+    item: &mut ResolvedBtfItem,
+    need_retval: bool,
+) {
     let proto = match btf.resolve_chained_type(&func).unwrap() {
         Type::FuncProto(proto) => proto,
         x => {
@@ -294,7 +299,7 @@ fn resolve_func_parameters(btf: &Btf, func: btf::Func, item: &mut ResolvedBtfIte
         item.children_vec.push(param_item);
     }
 
-    if ret_type_id > 0 {
+    if ret_type_id > 0 && need_retval {
         let mut ret_item = ResolvedBtfItem {
             name: "retval".to_string(),
             type_vec: Vec::new(),
@@ -354,7 +359,7 @@ fn is_pointer_type(btf: &Btf, base_id: u32) -> bool {
     }
 }
 
-pub fn btf_resolve_func(btf: &Btf, name: &str) -> Option<ResolvedBtfItem> {
+pub fn btf_resolve_func(btf: &Btf, name: &str, need_retval: bool) -> Option<ResolvedBtfItem> {
     log_dbg!(BTFRE, "Looking for {}", name);
     if let Err(_) = btf.resolve_types_by_name(name) {
         log_dbg!(BTFRE, "Looking for {} failed", name);
@@ -376,7 +381,7 @@ pub fn btf_resolve_func(btf: &Btf, name: &str) -> Option<ResolvedBtfItem> {
     item.type_id = func.get_type_id().unwrap_or_default();
     item.name = btf.resolve_name(&func).unwrap_or_default();
     item.type_vec = vec!["func".to_string()]; // TODO function prototype evaluation
-    resolve_func_parameters(btf, func, &mut item);
+    resolve_func_parameters(btf, func, &mut item, need_retval);
     Some(item)
 }
 
@@ -605,7 +610,7 @@ mod tests {
     fn test_resolve() {
         let btf = btf_setup_module("vmlinux").unwrap();
 
-        let r = btf_resolve_func(&btf, "alloc_pid").unwrap();
+        let r = btf_resolve_func(&btf, "alloc_pid", true).unwrap();
         assert!(r.name == "alloc_pid");
         assert!(r.children_vec[0].name == "ns");
 
@@ -626,7 +631,7 @@ mod tests {
         // alloc_pid: ns->rcu.next->func
         let btf = btf_setup_module("vmlinux").unwrap();
 
-        let base = btf_resolve_func(&btf, "alloc_pid").unwrap();
+        let base = btf_resolve_func(&btf, "alloc_pid", true).unwrap();
 
         let resolved = btf_iterate_over_names_chain(&btf, &base, "args.ns->rcu.next").unwrap();
         assert!(resolved.name == "next");
@@ -648,7 +653,7 @@ mod tests {
         // vfs_open: path->dentry->d_inode->i_uid
         let btf = btf_setup_module("vmlinux").unwrap();
 
-        let base = btf_resolve_func(&btf, "vfs_open").unwrap();
+        let base = btf_resolve_func(&btf, "vfs_open", true).unwrap();
         assert!(base.name == "vfs_open");
 
         let resolved = btf_iterate_over_names_chain(&btf, &base, "").unwrap();
@@ -702,7 +707,7 @@ mod tests {
                 return;
             }
         };
-        let base = btf_resolve_func(&btf, "rt2800_link_tuner").unwrap();
+        let base = btf_resolve_func(&btf, "rt2800_link_tuner", true).unwrap();
         let resolved = btf_iterate_over_names_chain(&btf, &base, "qual->").unwrap();
 
         let vgc_level = resolved
@@ -716,7 +721,7 @@ mod tests {
     #[test]
     fn test_resolve_k_itimer_union() {
         let btf = btf_setup_module("vmlinux").unwrap();
-        let base = btf_resolve_func(&btf, "posixtimer_send_sigqueue").unwrap();
+        let base = btf_resolve_func(&btf, "posixtimer_send_sigqueue", true).unwrap();
         let resolved = btf_iterate_over_names_chain(&btf, &base, "args.tmr->it").unwrap();
 
         assert!(resolved.type_vec.iter().any(|s| s == "union"));
@@ -749,7 +754,7 @@ mod tests {
                 return;
             }
         };
-        let base = btf_resolve_func(&btf, "ieee80211_register_hw").unwrap();
+        let base = btf_resolve_func(&btf, "ieee80211_register_hw", true).unwrap();
 
         // The argument is struct ieee80211_hw *hw
         let hw = btf_iterate_over_names_chain(&btf, &base, "args.hw").unwrap();

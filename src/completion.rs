@@ -106,8 +106,10 @@ fn find_probe_for_action(text: &str, line_nr: usize) -> String {
 
 fn kprobe_to_kfunc(probe: &str) -> String {
     let mut v: Vec<&str> = probe.split(":").collect();
-    if v[0] == "kprobe" || v[0] == "kretprobe" || v[0] == "fentry" || v[0] == "fexit" {
+    if v[0] == "kprobe" {
         v[0] = "kfunc";
+    } else if v[0] == "kretprobe" {
+        v[0] = "kretfunc";
     }
     let kfunc = v[..].join(":").to_string();
 
@@ -151,7 +153,7 @@ fn find_probe_args_by_command(probe: &str) -> String {
     probe_args
 }
 
-fn find_kfunc_args_by_btf(kfunc: &str) -> Option<(String, ResolvedBtfItem)> {
+fn find_kfunc_args_by_btf(kfunc: &str, need_retval: bool) -> Option<(String, ResolvedBtfItem)> {
     let kfunc_vec: Vec<&str> = kfunc.split(":").collect();
     log_dbg!(COMPL, "kfunc_vec {:?}", kfunc_vec);
 
@@ -179,7 +181,7 @@ fn find_kfunc_args_by_btf(kfunc: &str) -> Option<(String, ResolvedBtfItem)> {
         }
     }
 
-    if let Some(ret) = btf_resolve_func(this_btf, kfunc_vec[2]) {
+    if let Some(ret) = btf_resolve_func(this_btf, kfunc_vec[2], need_retval) {
         return Some((module.to_string(), ret));
     }
 
@@ -194,20 +196,24 @@ fn encode_completion_for_args_keyword(
     log_dbg!(COMPL, "Complete for argument: {}", args_with_fields);
 
     let mut is_kfunc = false;
-    if probe.starts_with("kprobe:")
-        || probe.starts_with("kretprobe:")
-        || probe.starts_with("kfunc:")
+    let mut need_retval = false;
+
+    if probe.starts_with("kprobe:") || probe.starts_with("fentry") || probe.starts_with("kfunc:") {
+        is_kfunc = true;
+    }
+
+    if probe.starts_with("kretprobe:")
         || probe.starts_with("kretfunc:")
-        || probe.starts_with("fentry")
         || probe.starts_with("fexit")
     {
         is_kfunc = true;
+        need_retval = true;
     }
 
     let mut btf_probe_args = None;
     if is_kfunc {
         let kfunc = kprobe_to_kfunc(probe);
-        btf_probe_args = find_kfunc_args_by_btf(&kfunc);
+        btf_probe_args = find_kfunc_args_by_btf(&kfunc, need_retval);
     }
 
     let mut args_as_string = String::new();
@@ -428,7 +434,8 @@ fn encode_completion_for_line(
                 };
 
                 if trace_tokens[0] == "kfunc" && kind == 3 {
-                    if let Some((_module, resolved_btf)) = find_kfunc_args_by_btf(trace_line) {
+                    if let Some((_module, resolved_btf)) = find_kfunc_args_by_btf(trace_line, true)
+                    {
                         item["detail"] = func_proto_str(&resolved_btf).into();
                     }
                 }
@@ -715,7 +722,7 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
     log_dbg!(HOVER, "Found hover item: {}", found);
 
     if found.starts_with("kfunc:") {
-        let args_by_btf = find_kfunc_args_by_btf(&found);
+        let args_by_btf = find_kfunc_args_by_btf(&found, true);
         if let Some((_module, resolved_btf)) = args_by_btf {
             data = object! {
                   "result": {
@@ -737,7 +744,7 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         if found == "args" {
             found.push('.');
         }
-        let btf_probe_args = find_kfunc_args_by_btf(&probe);
+        let btf_probe_args = find_kfunc_args_by_btf(&probe, true);
         if let Some((module, resolved_btf)) = btf_probe_args {
             // log_dbg!(HOVER, "Resolved BTF {:?}", resolved_btf);
             let arg_btf = argument_next_item(module, resolved_btf, &found);
@@ -814,7 +821,7 @@ mod tests {
 
     fn compare_btf_and_cmd(s: &str) {
         let args_by_cmd = find_probe_args_by_command(s);
-        let args_by_btf = find_kfunc_args_by_btf(s);
+        let args_by_btf = find_kfunc_args_by_btf(s, true);
 
         let resolved_btf = if let Some((_module, resolved_btf)) = args_by_btf {
             resolved_btf
@@ -1040,6 +1047,7 @@ mod tests {
         let fields = vec!["size", "cmd", "uattr"];
         check_completion_resutls(result, fields);
     }
+
     #[test]
     fn test_missing_left_bracket_action() {
         let text = r#"t:syscalls:sys_enter_bpf args. }"#;
