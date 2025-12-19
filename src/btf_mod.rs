@@ -406,7 +406,7 @@ fn chain_str_to_tokens(names_chain: &str) -> Vec<&str> {
     let mut start_idx = 0;
     let mut end_idx = 0;
 
-    for (i, c) in names_chain.chars().enumerate() {
+    for (i, c) in names_chain.char_indices() {
         match c {
             '.' => {
                 res.push(&names_chain[start_idx..i]);
