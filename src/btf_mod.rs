@@ -455,15 +455,10 @@ pub fn btf_iterate_over_names_chain(
             }
         };
 
-        let first_param = if let Some(param) = func_proto
+        let first_param = func_proto
             .parameters
             .iter()
-            .find(|&p| btf.resolve_name(p).unwrap().eq(first_name))
-        {
-            param
-        } else {
-            return None;
-        };
+            .find(|&p| btf.resolve_name(p).unwrap().eq(first_name))?;
 
         if names_iter.peek().is_none() {
             let resolved_param = resolve_parameter(btf, &first_param);
@@ -523,29 +518,21 @@ pub fn btf_iterate_over_names_chain(
                         continue;
                     }
                     Type::Struct(st) => {
-                        let member = if let Some(m) = st
+                        let member = st
                             .members
                             .iter()
-                            .find(|&m| btf.resolve_name(m).unwrap().eq(member_name))
-                        {
-                            m
-                        } else {
-                            return None;
-                        };
+                            .find(|&m| btf.resolve_name(m).unwrap().eq(member_name))?;
+
                         type_id = member.get_type_id().unwrap_or_default();
                         last_name = member_name;
                         break;
                     }
                     Type::Union(u) => {
-                        let member = if let Some(m) = u
+                        let member = u
                             .members
                             .iter()
-                            .find(|&m| btf.resolve_name(m).unwrap().eq(member_name))
-                        {
-                            m
-                        } else {
-                            return None;
-                        };
+                            .find(|&m| btf.resolve_name(m).unwrap().eq(member_name))?;
+
                         type_id = member.get_type_id().unwrap_or_default();
                         last_name = member_name;
                         break;
