@@ -557,8 +557,10 @@ pub fn btf_iterate_over_names_chain(
             r.name = last_name.to_string();
             return Some(r);
         }
-        let mut item = ResolvedBtfItem::default();
-        item.name = last_name.to_string();
+        let mut item = ResolvedBtfItem {
+            name: last_name.to_string(),
+            ..Default::default()
+        };
         resolve_type_id(btf, type_id, &mut item);
         Some(item)
     } else {
