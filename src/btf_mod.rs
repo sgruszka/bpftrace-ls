@@ -1,7 +1,7 @@
 use btf_rs::*;
 
-use crate::log_dbg;
 use crate::log_mod::{self, BTFRE};
+use crate::{log_dbg, log_err};
 
 #[derive(Debug, Clone, Default)]
 #[allow(unused_variables)]
@@ -361,8 +361,8 @@ fn is_pointer_type(btf: &Btf, base_id: u32) -> bool {
 
 pub fn btf_resolve_func(btf: &Btf, name: &str, need_retval: bool) -> Option<ResolvedBtfItem> {
     log_dbg!(BTFRE, "Looking for {}", name);
-    if let Err(_) = btf.resolve_types_by_name(name) {
-        log_dbg!(BTFRE, "Looking for {} failed", name);
+    if let Err(err) = btf.resolve_types_by_name(name) {
+        log_err!("Looking for {} failed with {:?}", name, err);
         return None;
     }
     let func = match btf.resolve_types_by_name(name).unwrap().pop().unwrap() {
