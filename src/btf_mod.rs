@@ -244,7 +244,7 @@ fn resolve_type_id(btf: &Btf, id: u32, param_item: &mut ResolvedBtfItem) {
             }
             Type::Ptr(ptr) => {
                 param_item.type_id = ptr.get_type_id().unwrap_or_default();
-                resolve_pointer(&btf, &ptr, param_item);
+                resolve_pointer(btf, &ptr, param_item);
                 break;
             }
             Type::Typedef(td) => {
@@ -461,7 +461,7 @@ pub fn btf_iterate_over_names_chain(
             .find(|&p| btf.resolve_name(p).unwrap().eq(first_name))?;
 
         if names_iter.peek().is_none() {
-            let resolved_param = resolve_parameter(btf, &first_param);
+            let resolved_param = resolve_parameter(btf, first_param);
             if let Some(mut r) = resolve_struct(btf, resolved_param.type_id) {
                 r.type_vec = resolved_param.type_vec;
                 return Some(r);
