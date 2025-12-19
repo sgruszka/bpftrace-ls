@@ -1,3 +1,4 @@
+use std::env;
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 
@@ -16,19 +17,11 @@ fn test_sudo() -> bool {
     false
 }
 
-fn test_debug() -> bool {
-    let mut cmd = if USE_SUDO.0 {
-        Command::new("sudo")
-    } else {
-        Command::new("bpftrace")
-    };
-
-    if USE_SUDO.0 {
-        cmd.arg("bpftrace");
-    }
+fn test_dry_run() -> bool {
+    let mut cmd = bpftrace_command();
 
     let res = cmd
-        .args(["-d", "all"])
+        .arg("--dry-run")
         .arg("-e")
         .arg(r"BEGIN { exit() }")
         .stdout(Stdio::null())
@@ -43,7 +36,8 @@ fn test_debug() -> bool {
 }
 
 struct UseSudo(bool);
-struct UseDbgArg(bool);
+struct UseDryRun(bool);
+struct CustomCommand(Option<String>);
 
 impl UseSudo {
     fn new() -> Self {
@@ -51,28 +45,31 @@ impl UseSudo {
     }
 }
 
-impl UseDbgArg {
+impl UseDryRun {
     fn new() -> Self {
-        UseDbgArg(test_debug())
+        UseDryRun(test_dry_run())
+    }
+}
+
+impl CustomCommand {
+    fn new() -> Self {
+        CustomCommand(env::var("BPFTRACE_LS_COMMAND").ok())
     }
 }
 
 static USE_SUDO: LazyLock<UseSudo> = LazyLock::new(UseSudo::new);
-static USE_DBG_ARG: LazyLock<UseDbgArg> = LazyLock::new(UseDbgArg::new);
+static USE_DRY_RUN: LazyLock<UseDryRun> = LazyLock::new(UseDryRun::new);
+static CUSTOM_COMMAND: LazyLock<CustomCommand> = LazyLock::new(CustomCommand::new);
 
 pub fn init() {
-    LazyLock::force(&USE_DBG_ARG);
+    LazyLock::force(&USE_DRY_RUN);
 }
 
 pub fn bpftrace_command() -> Command {
-    /*
-        if !CONFIG.env_var.is_empty() {
+    if let Some(custom_cmd) = &CUSTOM_COMMAND.0 {
+        return Command::new(custom_cmd);
+    }
 
-            Command::new(env_var)
-                .args(args)
-                .output()
-        }
-    */
     let mut cmd = if USE_SUDO.0 {
         Command::new("sudo")
     } else {
@@ -89,9 +86,8 @@ pub fn bpftrace_command() -> Command {
 pub fn bpftrace_debug_command() -> Command {
     let mut cmd = bpftrace_command();
 
-    if USE_DBG_ARG.0 {
-        cmd.arg("-d");
-        cmd.arg("all");
+    if USE_DRY_RUN.0 {
+        cmd.arg("--dry-run");
     } else {
         cmd.arg("-d");
     };

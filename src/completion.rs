@@ -350,10 +350,12 @@ fn func_proto_str(item: &ResolvedBtfItem) -> String {
 
 fn bpftrace_get_traces_list() -> Option<String> {
     let Ok(output) = bpftrace_command().arg("-l").output() else {
+        log_err!("Failed to get output from bpftrace command");
         return None;
     };
 
     let Ok(traces) = String::from_utf8(output.stdout) else {
+        log_err!("Failed to convert stdout to string");
         return None;
     };
 
