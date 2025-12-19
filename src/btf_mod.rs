@@ -568,21 +568,17 @@ pub fn btf_iterate_over_names_chain(
     }
 }
 
+#[allow(clippy::len_zero)]
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
     fn test_load_module() {
         let btf1 = btf_setup_module("vmlinux");
-        match btf1 {
-            Some(_) => assert!(true),
-            None => assert!(false),
-        }
-        let btf2 = btf_setup_module("blabla713h");
-        match btf2 {
-            Some(_) => assert!(false),
-            None => assert!(true),
-        }
+        assert!(btf1.is_some());
+
+        let btf2 = btf_setup_module("Xblabla713h");
+        assert!(btf2.is_none());
     }
 
     #[test]
