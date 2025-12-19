@@ -562,7 +562,7 @@ pub fn btf_iterate_over_names_chain(
         resolve_type_id(btf, type_id, &mut item);
         Some(item)
     } else {
-        return Some(func.clone());
+        Some(func.clone())
     }
 }
 
