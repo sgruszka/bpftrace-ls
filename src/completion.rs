@@ -104,6 +104,18 @@ fn find_probe_for_action(text: &str, line_nr: usize) -> String {
     "".to_string()
 }
 
+fn is_fentry_probe(probe: &str) -> bool {
+    probe.starts_with("fentry") || probe.starts_with("kfunc")
+}
+
+fn is_fexit_probe(probe: &str) -> bool {
+    probe.starts_with("fexit") || probe.starts_with("kretfunc")
+}
+
+fn is_btf_probe(probe: &str) -> bool {
+    is_fentry_probe(probe) || is_fexit_probe(probe)
+}
+
 fn kprobe_to_kfunc(probe: &str) -> String {
     let mut v: Vec<&str> = probe.split(":").collect();
     if v[0] == "kprobe" {
@@ -705,28 +717,23 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
 
     log_vdbg!(HOVER, "This is the text:\n'{}'", text);
 
-    let mut from_line: &str = text;
-    for (i, line) in text.lines().enumerate() {
-        if i == line_nr {
-            from_line = line
-        }
-    }
-    log_dbg!(HOVER, "Hover for line {}", from_line);
+    let line_str = text.lines().nth(line_nr).unwrap_or_default();
+    log_dbg!(HOVER, "Hover for line '{}'", &line_str);
 
     let found = find_hover_str(
-        from_line,
+        line_str,
         char_nr,
         |c| c.is_whitespace(),
         |c| c.is_whitespace(),
     );
     log_dbg!(HOVER, "Found hover item: {}", found);
 
-    if found.starts_with("kfunc:") {
+    if is_btf_probe(&found) {
         let args_by_btf = find_kfunc_args_by_btf(&found, true);
         if let Some((_module, resolved_btf)) = args_by_btf {
             data = object! {
                   "result": {
-                      "contents": format!("Probe for function:\n```c\n{}```", func_proto_str(&resolved_btf)),
+                      "contents": format!("{}:\n```c\n{}```", found, func_proto_str(&resolved_btf)),
                   },
             };
         }
@@ -738,7 +745,7 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         let lterm = |c: char| -> bool { c.is_whitespace() || c == '{' || c == '(' };
         let rterm =
             |c: char| -> bool { c.is_whitespace() || c == '}' || c == ')' || c == '.' || c == '-' };
-        let mut found = find_hover_str(from_line, char_nr, lterm, rterm);
+        let mut found = find_hover_str(line_str, char_nr, lterm, rterm);
         log_dbg!(HOVER, "Hover found args string {}", found);
 
         if found == "args" {
