@@ -401,12 +401,19 @@ fn encode_completion_for_line(
         line_tokens[0] = prefix;
     }
 
-    if line_tokens[0] == "kretprobe"
+    if line_tokens[0] == "kfunc"
         || line_tokens[0] == "kretfunc"
         || line_tokens[0] == "fentry"
         || line_tokens[0] == "fexit"
     {
-        line_tokens[0] = "kfunc";
+        // TODO the ugliest hack I've ever made
+        if available_traces.contains("\nfentry") {
+            line_tokens[0] = "fentry";
+        } else {
+            line_tokens[0] = "kfunc";
+        }
+    } else if line_tokens[0] == "kretprobe" {
+        line_tokens[0] = "kprobe";
     }
 
     let search_line = line_tokens.join(":");
@@ -415,6 +422,7 @@ fn encode_completion_for_line(
     for trace_line in available_traces.lines() {
         if trace_line.trim().starts_with(search_line.trim()) {
             //TODO: save matched tokens ans skip duplicate lines here
+            // log_vdbg!(COMPL, "Found available traces line '{}'", trace_line);
 
             let trace_tokens: Vec<&str> = trace_line.split(":").collect();
 
@@ -447,7 +455,7 @@ fn encode_completion_for_line(
                     // "documentation": "need better documentation",
                 };
 
-                if trace_tokens[0] == "kfunc" && kind == 3 {
+                if (trace_tokens[0] == "kfunc" || trace_tokens[0] == "fentry") && kind == 3 {
                     if let Some((_module, resolved_btf)) = find_kfunc_args_by_btf(trace_line, true)
                     {
                         item["detail"] = func_proto_str(&resolved_btf).into();
