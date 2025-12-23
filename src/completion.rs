@@ -443,7 +443,7 @@ fn encode_completion_for_line(
                 };
 
                 let kind = if match_tokens == trace_tokens.len() - 1 {
-                    3 // Function
+                    10 // Property
                 } else {
                     9 // Module
                 };
@@ -455,7 +455,7 @@ fn encode_completion_for_line(
                     // "documentation": "need better documentation",
                 };
 
-                if (trace_tokens[0] == "kfunc" || trace_tokens[0] == "fentry") && kind == 3 {
+                if (trace_tokens[0] == "kfunc" || trace_tokens[0] == "fentry") && kind == 10 {
                     if let Some((_module, resolved_btf)) = find_kfunc_args_by_btf(trace_line, true)
                     {
                         item["detail"] = func_proto_str(&resolved_btf).into();
