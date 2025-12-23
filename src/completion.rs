@@ -23,6 +23,8 @@ static MODULE_BTF_MAP: LazyLock<Mutex<HashMap<String, Btf>>> =
 
 static AVAILABE_TRACES: OnceLock<Option<String>> = OnceLock::new();
 
+static FENTRY_KFUNC_NAME: OnceLock<&'static str> = OnceLock::new();
+
 fn text_get_line(text: &str, line_nr: usize) -> String {
     let mut from_line = String::new();
     for (i, line) in text.lines().enumerate() {
@@ -406,12 +408,15 @@ fn encode_completion_for_line(
         || line_tokens[0] == "fentry"
         || line_tokens[0] == "fexit"
     {
-        // TODO the ugliest hack I've ever made
-        if available_traces.contains("\nfentry") {
-            line_tokens[0] = "fentry";
-        } else {
-            line_tokens[0] = "kfunc";
-        }
+        let fentry_kfunc_name = FENTRY_KFUNC_NAME.get_or_init(||
+            // TOOD: rewrite this to have separte lines for each probe type
+            if available_traces.contains("\nfentry") {
+                "fentry"
+            } else {
+                "kfunc"
+            }
+        );
+        line_tokens[0] = fentry_kfunc_name;
     } else if line_tokens[0] == "kretprobe" {
         line_tokens[0] = "kprobe";
     }
