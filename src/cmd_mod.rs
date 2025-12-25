@@ -5,6 +5,9 @@ use std::process::Output;
 use std::sync::LazyLock;
 use std::sync::OnceLock;
 
+use crate::log_err;
+use crate::log_mod;
+
 static USE_SUDO: OnceLock<bool> = OnceLock::new();
 static USE_DRY_RUN: OnceLock<bool> = OnceLock::new();
 
@@ -60,15 +63,22 @@ pub fn bpftrace_dry_run_command(prog: &str) -> io::Result<Output> {
         } else {
             return bpftrace_command(&args_d);
         }
-    };
+    }
 
     if let Ok(output) = bpftrace_command(&args_dry_run) {
         if output.status.success() {
             let _ = USE_DRY_RUN.set(true);
+            return Ok(output);
         }
-        return Ok(output);
     }
 
     let _ = USE_DRY_RUN.set(false);
     bpftrace_command(&args_d)
+}
+
+pub fn init_bpftrace_dry_run() {
+    let result = bpftrace_dry_run_command("BEGIN { exit() }");
+    if let Err(e) = result {
+        log_err!("Failed to detect bpftrace dry-run command, error {:?}", e);
+    }
 }

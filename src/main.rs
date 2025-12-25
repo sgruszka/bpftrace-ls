@@ -775,6 +775,7 @@ fn main() {
     log_dbg!(PROTO, "{} {} started", PKG_NAME, PKG_VERSION);
 
     let completion_init = thread::spawn(completion::init_available_traces);
+    let command_init = thread::spawn(cmd_mod::init_bpftrace_dry_run);
 
     let (mpsc_tx, mpsc_rx) = mpsc::channel::<MpscMessage>();
     let diag_mpsc_tx = mpsc_tx.clone();
@@ -783,6 +784,7 @@ fn main() {
     let (diag_tx, diag_rx) = mpsc::channel::<DiagnosticsCommand>();
     thread::spawn(move || {
         let _ = completion_init.join();
+        let _ = command_init.join();
         thread_diagnostics(diag_mpsc_tx, diag_rx)
     });
 
