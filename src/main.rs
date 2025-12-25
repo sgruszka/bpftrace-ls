@@ -384,7 +384,7 @@ fn bpftrace_diag_definitions_error(
 fn do_diagnotics(text: &str) -> json::JsonValue {
     let mut diagnostics = json::JsonValue::new_array();
 
-    let output = if let Ok(ok_output) = cmd_mod::bpftrace_debug_command(&["-e", text]) {
+    let output = if let Ok(ok_output) = cmd_mod::bpftrace_dry_run_command(text) {
         ok_output
     } else {
         return diagnostics;
@@ -396,11 +396,11 @@ fn do_diagnotics(text: &str) -> json::JsonValue {
         return diagnostics;
     };
 
-    log_vdbg!(DIAGN, "Output from bpftrace -d -e:\n{output}\n");
+    log_vdbg!(DIAGN, "Parsing bpftrace dry-run lines:");
 
     for line in output.lines() {
         let tokens: Vec<&str> = line.split(":").collect();
-        log_dbg!(DIAGN, "Parsing error line: {}", line);
+        log_vdbg!(DIAGN, "{}", line);
 
         if tokens.len() < 3 {
             continue;

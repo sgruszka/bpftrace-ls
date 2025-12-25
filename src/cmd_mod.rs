@@ -50,12 +50,9 @@ pub fn bpftrace_command(args: &[&str]) -> io::Result<Output> {
     sudo_bpftrace_command(true, args)
 }
 
-pub fn bpftrace_debug_command(args: &[&str]) -> io::Result<Output> {
-    let mut args_dry_run = vec!["--dry-run"];
-    args_dry_run.extend(args);
-
-    let mut args_d = vec!["-d"];
-    args_d.extend(args);
+pub fn bpftrace_dry_run_command(prog: &str) -> io::Result<Output> {
+    let args_dry_run = vec!["--dry-run", "-e", prog];
+    let args_d = vec!["-d", "-e", prog];
 
     if let Some(use_dry_run) = USE_DRY_RUN.get() {
         if *use_dry_run {
