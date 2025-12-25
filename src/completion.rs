@@ -2,6 +2,7 @@ use json::{self, object};
 use std::collections::HashMap;
 use std::str::Lines;
 use std::sync::{LazyLock, Mutex, OnceLock};
+use std::time::Instant;
 use tree_sitter::Node;
 
 use crate::btf_mod::{
@@ -346,6 +347,8 @@ fn func_proto_str(item: &ResolvedBtfItem) -> String {
 }
 
 fn bpftrace_get_traces_list() -> Option<String> {
+    let start = Instant::now();
+
     let Ok(output) = bpftrace_command(&["-l"]) else {
         log_err!("Failed to get output from bpftrace command");
         return None;
@@ -356,14 +359,18 @@ fn bpftrace_get_traces_list() -> Option<String> {
         return None;
     };
 
+    log_dbg!(
+        COMPL,
+        "Got list of available traces after {:?}",
+        start.elapsed()
+    );
+
     log_vdbg!(COMPL, "List of available traces: \n{traces}\n");
     Some(traces)
 }
 
 pub fn init_available_traces() {
     let _ = AVAILABE_TRACES.get_or_init(bpftrace_get_traces_list);
-
-    log_dbg!(COMPL, "Initalized available traces");
 }
 
 fn encode_completion_for_line(
