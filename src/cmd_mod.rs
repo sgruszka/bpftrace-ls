@@ -1,23 +1,9 @@
 use std::env;
 use std::io;
+use std::process::Command;
 use std::process::Output;
-use std::process::{Command, Stdio};
 use std::sync::LazyLock;
-
-fn test_sudo() -> bool {
-    let res = Command::new("sudo")
-        .arg("bpftrace")
-        .arg("--help")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-
-    if let Ok(status) = res {
-        return status.success();
-    }
-
-    false
-}
+use std::sync::OnceLock;
 
 fn test_dry_run() -> bool {
     let args = ["--dry-run", "-e", r"BEGIN { exit() }"];
@@ -31,15 +17,8 @@ fn test_dry_run() -> bool {
     false
 }
 
-struct UseSudo(bool);
 struct UseDryRun(bool);
 struct CustomCommand(Option<String>);
-
-impl UseSudo {
-    fn new() -> Self {
-        UseSudo(test_sudo())
-    }
-}
 
 impl UseDryRun {
     fn new() -> Self {
@@ -53,7 +32,8 @@ impl CustomCommand {
     }
 }
 
-static USE_SUDO: LazyLock<UseSudo> = LazyLock::new(UseSudo::new);
+static USE_SUDO: OnceLock<bool> = OnceLock::new();
+
 static USE_DRY_RUN: LazyLock<UseDryRun> = LazyLock::new(UseDryRun::new);
 static CUSTOM_COMMAND: LazyLock<CustomCommand> = LazyLock::new(CustomCommand::new);
 
@@ -61,22 +41,38 @@ pub fn init() {
     LazyLock::force(&USE_DRY_RUN);
 }
 
-pub fn bpftrace_command(args: &[&str]) -> io::Result<Output> {
-    if let Some(custom_cmd) = &CUSTOM_COMMAND.0 {
-        return Command::new(custom_cmd).args(args).output();
-    }
-
-    let mut cmd = if USE_SUDO.0 {
+fn sudo_bpftrace_command(use_sudo: bool, args: &[&str]) -> io::Result<Output> {
+    let mut cmd = if use_sudo {
         Command::new("sudo")
     } else {
         Command::new("bpftrace")
     };
 
-    if USE_SUDO.0 {
+    if use_sudo {
         cmd.arg("bpftrace");
     }
 
     cmd.args(args).output()
+}
+
+pub fn bpftrace_command(args: &[&str]) -> io::Result<Output> {
+    if let Some(custom_cmd) = &CUSTOM_COMMAND.0 {
+        return Command::new(custom_cmd).args(args).output();
+    }
+
+    if let Some(use_sudo) = USE_SUDO.get() {
+        return sudo_bpftrace_command(*use_sudo, args);
+    }
+
+    if let Ok(output) = sudo_bpftrace_command(false, args) {
+        if output.status.success() {
+            let _ = USE_SUDO.set(false);
+            return Ok(output);
+        }
+    }
+
+    let _ = USE_SUDO.set(true);
+    sudo_bpftrace_command(true, args)
 }
 
 pub fn bpftrace_debug_command(args: &[&str]) -> io::Result<Output> {
