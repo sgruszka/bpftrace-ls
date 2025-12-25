@@ -775,7 +775,6 @@ fn main() {
     log_dbg!(PROTO, "{} {} started", PKG_NAME, PKG_VERSION);
 
     let _completion_init = thread::spawn(completion::init_available_traces);
-    let _command_init = thread::spawn(cmd_mod::init);
 
     let (mpsc_tx, mpsc_rx) = mpsc::channel::<MpscMessage>();
     let diag_mpsc_tx = mpsc_tx.clone();

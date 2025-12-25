@@ -5,41 +5,16 @@ use std::process::Output;
 use std::sync::LazyLock;
 use std::sync::OnceLock;
 
-fn test_dry_run() -> bool {
-    let args = ["--dry-run", "-e", r"BEGIN { exit() }"];
+static USE_SUDO: OnceLock<bool> = OnceLock::new();
+static USE_DRY_RUN: OnceLock<bool> = OnceLock::new();
 
-    if let Ok(output) = bpftrace_command(&args) {
-        if output.status.success() {
-            return true;
-        }
-    }
-
-    false
-}
-
-struct UseDryRun(bool);
 struct CustomCommand(Option<String>);
-
-impl UseDryRun {
-    fn new() -> Self {
-        UseDryRun(test_dry_run())
-    }
-}
-
 impl CustomCommand {
     fn new() -> Self {
         CustomCommand(env::var("BPFTRACE_LS_COMMAND").ok())
     }
 }
-
-static USE_SUDO: OnceLock<bool> = OnceLock::new();
-
-static USE_DRY_RUN: LazyLock<UseDryRun> = LazyLock::new(UseDryRun::new);
 static CUSTOM_COMMAND: LazyLock<CustomCommand> = LazyLock::new(CustomCommand::new);
-
-pub fn init() {
-    LazyLock::force(&USE_DRY_RUN);
-}
 
 fn sudo_bpftrace_command(use_sudo: bool, args: &[&str]) -> io::Result<Output> {
     let mut cmd = if use_sudo {
@@ -76,15 +51,27 @@ pub fn bpftrace_command(args: &[&str]) -> io::Result<Output> {
 }
 
 pub fn bpftrace_debug_command(args: &[&str]) -> io::Result<Output> {
-    let mut debug_args;
+    let mut args_dry_run = vec!["--dry-run"];
+    args_dry_run.extend(args);
 
-    if USE_DRY_RUN.0 {
-        debug_args = vec!["--dry-run"];
-    } else {
-        debug_args = vec!["-d"];
+    let mut args_d = vec!["-d"];
+    args_d.extend(args);
+
+    if let Some(use_dry_run) = USE_DRY_RUN.get() {
+        if *use_dry_run {
+            return bpftrace_command(&args_dry_run);
+        } else {
+            return bpftrace_command(&args_d);
+        }
     };
 
-    debug_args.extend(args);
+    if let Ok(output) = bpftrace_command(&args_dry_run) {
+        if output.status.success() {
+            let _ = USE_DRY_RUN.set(true);
+        }
+        return Ok(output);
+    }
 
-    bpftrace_command(&debug_args)
+    let _ = USE_DRY_RUN.set(false);
+    bpftrace_command(&args_d)
 }
