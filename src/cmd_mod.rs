@@ -1,4 +1,6 @@
 use std::env;
+use std::io;
+use std::process::Output;
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 
@@ -18,18 +20,12 @@ fn test_sudo() -> bool {
 }
 
 fn test_dry_run() -> bool {
-    let mut cmd = bpftrace_command();
+    let args = ["--dry-run", "-e", r"BEGIN { exit() }"];
 
-    let res = cmd
-        .arg("--dry-run")
-        .arg("-e")
-        .arg(r"BEGIN { exit() }")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-
-    if let Ok(status) = res {
-        return status.success();
+    if let Ok(output) = bpftrace_command(&args) {
+        if output.status.success() {
+            return true;
+        }
     }
 
     false
@@ -65,9 +61,9 @@ pub fn init() {
     LazyLock::force(&USE_DRY_RUN);
 }
 
-pub fn bpftrace_command() -> Command {
+pub fn bpftrace_command(args: &[&str]) -> io::Result<Output> {
     if let Some(custom_cmd) = &CUSTOM_COMMAND.0 {
-        return Command::new(custom_cmd);
+        return Command::new(custom_cmd).args(args).output();
     }
 
     let mut cmd = if USE_SUDO.0 {
@@ -80,17 +76,19 @@ pub fn bpftrace_command() -> Command {
         cmd.arg("bpftrace");
     }
 
-    cmd
+    cmd.args(args).output()
 }
 
-pub fn bpftrace_debug_command() -> Command {
-    let mut cmd = bpftrace_command();
+pub fn bpftrace_debug_command(args: &[&str]) -> io::Result<Output> {
+    let mut debug_args;
 
     if USE_DRY_RUN.0 {
-        cmd.arg("--dry-run");
+        debug_args = vec!["--dry-run"];
     } else {
-        cmd.arg("-d");
+        debug_args = vec!["-d"];
     };
 
-    cmd
+    debug_args.extend(args);
+
+    bpftrace_command(&debug_args)
 }

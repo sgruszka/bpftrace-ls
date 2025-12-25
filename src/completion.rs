@@ -143,12 +143,7 @@ fn find_probe_args_by_command(probe: &str) -> String {
     let mut probe_args = "".to_string();
     if let Some(args) = probes_args_map.get(&probe) {
         probe_args = args.to_string();
-    } else if let Ok(output) = bpftrace_command()
-        .arg("-l")
-        .arg("-v")
-        .arg(probe.clone())
-        .output()
-    {
+    } else if let Ok(output) = bpftrace_command(&["-l", "-v", &probe]) {
         if let Ok(stdout_probe_args) = String::from_utf8(output.stdout) {
             probe_args = stdout_probe_args.clone();
         }
@@ -351,7 +346,7 @@ fn func_proto_str(item: &ResolvedBtfItem) -> String {
 }
 
 fn bpftrace_get_traces_list() -> Option<String> {
-    let Ok(output) = bpftrace_command().arg("-l").output() else {
+    let Ok(output) = bpftrace_command(&["-l"]) else {
         log_err!("Failed to get output from bpftrace command");
         return None;
     };

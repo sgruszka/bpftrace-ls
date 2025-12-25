@@ -384,11 +384,7 @@ fn bpftrace_diag_definitions_error(
 fn do_diagnotics(text: &str) -> json::JsonValue {
     let mut diagnostics = json::JsonValue::new_array();
 
-    let mut cmd = cmd_mod::bpftrace_debug_command();
-    cmd.arg("-e");
-    cmd.arg(text);
-
-    let output = if let Ok(ok_output) = cmd.output() {
+    let output = if let Ok(ok_output) = cmd_mod::bpftrace_debug_command(&["-e", text]) {
         ok_output
     } else {
         return diagnostics;
