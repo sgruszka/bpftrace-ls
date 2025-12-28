@@ -26,17 +26,6 @@ static AVAILABE_TRACES: OnceLock<Option<String>> = OnceLock::new();
 
 static FENTRY_KFUNC_NAME: OnceLock<&'static str> = OnceLock::new();
 
-fn text_get_line(text: &str, line_nr: usize) -> String {
-    let mut from_line = String::new();
-    for (i, line) in text.lines().enumerate() {
-        if i == line_nr {
-            from_line = line.to_string();
-        }
-    }
-
-    from_line
-}
-
 fn btf_item_to_str(item: &ResolvedBtfItem) -> String {
     let mut s = item.type_vec.join(" ").to_string();
     s.push_str(" ");
@@ -608,7 +597,7 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     let (loc, node) = parser::find_syntax_location(text, tree, line_nr, char_nr);
     log_dbg!(COMPL, "Found syntax location: {:?}", loc);
 
-    let line_str = text_get_line(text, line_nr);
+    let line_str = text.lines().nth(line_nr).unwrap_or_default();
     log_dbg!(
         COMPL,
         "Complete for line: '{}' at char {} : '{}'",
