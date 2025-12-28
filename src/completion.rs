@@ -609,7 +609,7 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     );
 
     if loc == SyntaxLocation::Action {
-        if let Some(args) = parser::is_argument(&line_str, char_nr) {
+        if let Some(args) = parser::is_argument(line_str, char_nr) {
             let probe = parser::find_probe_for_action(&node, text);
             if !probe.is_empty() {
                 log_dbg!(COMPL, "Found probe {}", probe);
@@ -619,14 +619,14 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
                 }
             }
         } else {
-            if let Some(data) = encode_completion_for_action(text, &node, &line_str, char_nr) {
+            if let Some(data) = encode_completion_for_action(text, &node, line_str, char_nr) {
                 return data;
             }
         }
     }
 
     if loc == SyntaxLocation::SourceFile && node.has_error() {
-        if let Some(args) = parser::is_argument(&line_str, char_nr) {
+        if let Some(args) = parser::is_argument(line_str, char_nr) {
             if let Some(error_node) = find_error_location(text, tree, line_nr, char_nr) {
                 let probe = parser::find_probe_for_error(&error_node, text);
                 if !probe.is_empty() {
@@ -646,7 +646,7 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
             let (head, _tail) = splited_line;
             head
         } else {
-            &line_str
+            line_str
         };
 
         log_dbg!(COMPL, "Complete for line head: '{line_head}'");
