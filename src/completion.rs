@@ -568,15 +568,8 @@ fn encode_completion_for_probes(line_str: &str) -> json::JsonValue {
     encode_completion_for_empty_line()
 }
 
-#[allow(clippy::collapsible_else_if)]
-pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
-    let uri = &content["params"]["textDocument"]["uri"].to_string();
-
-    let text_doc = if let Some(doc) = DOCUMENTS_STATE.get(uri) {
-        doc
-    } else {
-        return encode_no_completion();
-    };
+fn unpack_text_document_info(content: json::JsonValue) -> (String, usize, usize) {
+    let uri = content["params"]["textDocument"]["uri"].to_string();
 
     let position = &content["params"]["position"];
 
@@ -586,11 +579,20 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
         .unwrap_or_default()
         .saturating_sub(1);
 
+    (uri, line_nr, char_nr)
+}
+
+#[allow(clippy::collapsible_else_if)]
+pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
+    let (uri, line_nr, char_nr) = unpack_text_document_info(content);
+
+    let Some(text_doc) = DOCUMENTS_STATE.get(&uri) else {
+        return encode_no_completion();
+    };
+
     let text = &text_doc.text;
 
-    let tree = if let Some(tree) = &text_doc.syntax_tree {
-        tree
-    } else {
+    let Some(tree) = &text_doc.syntax_tree else {
         return encode_no_completion();
     };
 
@@ -704,22 +706,19 @@ where
 
 pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
     log_dbg!(HOVER, "Received hover with data {}", content);
-
-    let position = &content["params"]["position"];
-    let line_nr = position["line"].as_usize().unwrap();
-    let char_nr = position["character"].as_usize().unwrap();
-
-    let uri = &content["params"]["textDocument"]["uri"].to_string();
+    let (uri, line_nr, char_nr) = unpack_text_document_info(content);
 
     let mut data = object! {};
 
-    let option = DOCUMENTS_STATE.get(uri);
-    if option.is_none() {
+    let Some(text_doc) = DOCUMENTS_STATE.get(&uri) else {
         return data;
-    }
+    };
 
-    let text_doc = option.unwrap();
     let text = &text_doc.text;
+
+    let Some(_tree) = &text_doc.syntax_tree else {
+        return encode_no_completion();
+    };
 
     log_vdbg!(HOVER, "This is the text:\n'{}'", text);
 
