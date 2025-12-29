@@ -866,7 +866,7 @@ mod tests {
         assert!(resolved_btf.children_vec.len() == n);
     }
 
-    fn completion_setup(text: &str, line_nr: usize, char_nr: usize) -> json::JsonValue {
+    fn document_content_setup(text: &str, line_nr: usize, char_nr: usize) -> json::JsonValue {
         let uri = format!(
             "file:///completion_test{}.bt",
             URI_COUNTER.fetch_add(1, Ordering::Relaxed)
@@ -919,7 +919,7 @@ mod tests {
     #[test]
     fn test_action_completion_for_do_sys_open() {
         let text = "kprobe:do_sys_open { ";
-        let json_content = completion_setup(text, 0, text.len() - 1);
+        let json_content = document_content_setup(text, 0, text.len() - 1);
 
         let result = encode_completion(json_content);
         assert!(result["result"]["items"].len() > 0);
@@ -932,7 +932,7 @@ mod tests {
 
     #[test]
     fn test_probes_completion_for_empty_line() {
-        let json_content = completion_setup("", 0, 0);
+        let json_content = document_content_setup("", 0, 0);
 
         let result = encode_completion(json_content);
         assert!(result["result"]["items"].len() > 0);
@@ -954,7 +954,7 @@ mod tests {
     #[test]
     fn test_probes_completion_for_modules() {
         for text in vec!["kfunc:", "kretfunc:", "fentry:", "fexit:"].into_iter() {
-            let json_content = completion_setup(text, 0, text.len() - 1);
+            let json_content = document_content_setup(text, 0, text.len() - 1);
 
             let result = encode_completion(json_content);
             assert!(result["result"]["items"].len() > 0);
@@ -967,7 +967,7 @@ mod tests {
     #[test]
     fn test_probes_completion_for_vfs_functions() {
         let text = "kfunc:vmlinux:vfs_";
-        let json_content = completion_setup(text, 0, text.len() - 1);
+        let json_content = document_content_setup(text, 0, text.len() - 1);
 
         let result = encode_completion(json_content);
         assert!(result["result"]["items"].len() > 0);
@@ -990,7 +990,7 @@ mod tests {
     #[test]
     fn test_args_completion_for_hrtimer_base() {
         let text = r#"kfunc:vmlinux:posix_timer_fn { printf("%d\n", args.timer->base-> ); }"#;
-        let json_content = completion_setup(text, 0, text.len() - 5);
+        let json_content = document_content_setup(text, 0, text.len() - 5);
 
         let result = encode_completion(json_content);
         assert!(result["result"]["items"].len() > 0);
@@ -1004,7 +1004,7 @@ mod tests {
     #[test]
     fn test_args_completion_for_posix_cpu_clock_get() {
         let text = r#"fexit:vmlinux:posix_cpu_clock_get { args. }"#;
-        let json_content = completion_setup(text, 0, text.len() - 2);
+        let json_content = document_content_setup(text, 0, text.len() - 2);
 
         let result = encode_completion(json_content);
         assert!(result["result"]["items"].len() > 0);
@@ -1016,7 +1016,7 @@ mod tests {
     #[test]
     fn test_modules_completion_for_short_tracepoint() {
         let text = r#"t:"#;
-        let json_content = completion_setup(text, 0, text.len());
+        let json_content = document_content_setup(text, 0, text.len());
 
         let result = encode_completion(json_content);
         assert!(result["result"]["items"].len() > 0);
@@ -1036,7 +1036,7 @@ mod tests {
     #[test]
     fn test_modules_completion_for_short_clk() {
         let text = r#"t:clk:"#;
-        let json_content = completion_setup(text, 0, text.len());
+        let json_content = document_content_setup(text, 0, text.len());
 
         let result = encode_completion(json_content);
         assert!(result["result"]["items"].len() > 0);
@@ -1057,7 +1057,7 @@ mod tests {
     #[test]
     fn test_missing_right_bracket_action() {
         let text = r#"t:syscalls:sys_enter_bpf { args."#;
-        let json_content = completion_setup(text, 0, text.len());
+        let json_content = document_content_setup(text, 0, text.len());
         let result = encode_completion(json_content);
         assert!(result["result"]["items"].len() > 0);
 
@@ -1068,7 +1068,7 @@ mod tests {
     #[test]
     fn test_missing_left_bracket_action() {
         let text = r#"t:syscalls:sys_enter_bpf args. }"#;
-        let json_content = completion_setup(text, 0, text.len() - 2);
+        let json_content = document_content_setup(text, 0, text.len() - 2);
         let result = encode_completion(json_content);
         assert!(result["result"]["items"].len() > 0);
 
