@@ -1075,4 +1075,15 @@ mod tests {
         let fields = vec!["size", "cmd", "uattr"];
         check_completion_resutls(result, fields);
     }
+
+    #[test]
+    fn test_hover_for_kfunc() {
+        let text = r"kfunc:vmlinux:posix_timer_fn {}";
+        let json_content = document_content_setup(text, 0, text.len() - 10);
+        let result = encode_hover(json_content);
+
+        let hover = result["result"]["contents"].as_str().unwrap();
+        assert!(hover.contains(r"kfunc:vmlinux:posix_timer_fn"));
+        assert!(hover.contains(r"hrtimer_restart posix_timer_fn(struct hrtimer *timer)"));
+    }
 }
