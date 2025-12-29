@@ -79,23 +79,6 @@ fn argument_next_item(
     ResolvedBtfItem::default()
 }
 
-fn find_probe_for_action(text: &str, line_nr: usize) -> String {
-    if let Some(line) = text.lines().nth(line_nr) {
-        if let Some(char_nr) = line.find("{") {
-            let trimed = line[0..char_nr].trim();
-            if !trimed.is_empty() {
-                return trimed.to_string();
-            } else {
-                let prev_line_nr = line_nr - 1;
-                if let Some(line_prev) = text.lines().nth(prev_line_nr) {
-                    return line_prev.trim().to_string();
-                }
-            }
-        }
-    }
-    "".to_string()
-}
-
 fn is_fentry_probe(probe: &str) -> bool {
     probe.starts_with("fentry") || probe.starts_with("kfunc")
 }
@@ -725,36 +708,44 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
     log_dbg!(HOVER, "Received hover with data {}", content);
     let (uri, line_nr, char_nr) = unpack_text_document_info(content);
 
+    let empty_data = object! {};
     let mut data = object! {};
 
     let Some(text_doc) = DOCUMENTS_STATE.get(&uri) else {
-        return data;
+        return empty_data;
     };
 
-    let (text, _loc, _node, line_str) =
-        get_document_state!(text_doc, line_nr, char_nr, data, HOVER);
+    let (text, loc, node, line_str) = get_document_state!(text_doc, line_nr, char_nr, data, HOVER);
 
-    let found = find_hover_str(
-        line_str,
-        char_nr,
-        |c| c.is_whitespace(),
-        |c| c.is_whitespace(),
-    );
-    log_dbg!(HOVER, "Found hover item: {}", found);
+    if loc == SyntaxLocation::ProbesList {
+        assert_eq!(node.kind(), "probes_list");
 
-    if is_btf_probe(&found) {
-        let args_by_btf = find_kfunc_args_by_btf(&found, true);
+        // TODO extend beyond just single probes
+        if node.child_count() < 1 {
+            return empty_data;
+        }
+        let probe_node = node.child(0).unwrap();
+
+        let probe = probe_node.utf8_text(text.as_bytes()).unwrap_or_default();
+        log_dbg!(HOVER, "Hover for probe {}", probe);
+
+        if !is_btf_probe(probe) {
+            return empty_data;
+        }
+
+        let args_by_btf = find_kfunc_args_by_btf(probe, true);
         if let Some((_module, resolved_btf)) = args_by_btf {
             data = object! {
                   "result": {
-                      "contents": format!("{}:\n```c\n{}```", found, func_proto_str(&resolved_btf)),
+                      "contents": format!("{}:\n```c\n{}```", probe, func_proto_str(&resolved_btf)),
                   },
             };
         }
-    } else if parser::is_action_block(text, line_nr, char_nr) {
-        let probe = find_probe_for_action(text, line_nr);
-        let probe_args = find_probe_args_by_command(&probe);
-        log_dbg!(HOVER, "Probe {} with args:\n{}", probe, probe_args);
+    } else if loc == SyntaxLocation::Action {
+        let probe = parser::find_probe_for_action(&node, text);
+        // TODO: non BTF probes i.e. tracepoints
+        // let probe_args = find_probe_args_by_command(&probe);
+        // log_dbg!(HOVER, "Probe {} with args:\n{}", probe, probe_args);
 
         let lterm = |c: char| -> bool { c.is_whitespace() || c == '{' || c == '(' };
         let rterm =
@@ -766,25 +757,27 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
             found.push('.');
         }
         let btf_probe_args = find_kfunc_args_by_btf(&probe, true);
-        if let Some((module, resolved_btf)) = btf_probe_args {
-            // log_dbg!(HOVER, "Resolved BTF {:?}", resolved_btf);
-            let arg_btf = argument_next_item(module, resolved_btf, &found);
-            // log_dbg!(HOVER, "ARG BTF {:?}", arg_btf);
-            let mut hover = btf_item_to_str(&arg_btf);
-            let args = children_to_vec_str(&arg_btf);
+        let Some((module, resolved_btf)) = btf_probe_args else {
+            return empty_data;
+        };
 
-            hover.push_str("\n");
-            hover.push_str("\n");
-            hover.push_str(&args.join("\n"));
+        // log_dbg!(HOVER, "Resolved BTF {:?}", resolved_btf);
+        let arg_btf = argument_next_item(module, resolved_btf, &found);
+        // log_dbg!(HOVER, "ARG BTF {:?}", arg_btf);
+        let mut hover = btf_item_to_str(&arg_btf);
+        let args = children_to_vec_str(&arg_btf);
 
-            log_dbg!(HOVER, "Hover:\n{:?}", hover);
+        hover.push_str("\n");
+        hover.push_str("\n");
+        hover.push_str(&args.join("\n"));
 
-            data = object! {
-                  "result": {
-                      "contents": hover,
-                  },
-            };
-        }
+        log_dbg!(HOVER, "Hover:\n{:?}", hover);
+
+        data = object! {
+              "result": {
+                  "contents": hover,
+              },
+        };
     }
 
     data

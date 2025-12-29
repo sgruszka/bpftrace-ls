@@ -234,43 +234,6 @@ pub fn find_location(tree: &Tree, line_nr: usize, char_nr: usize) -> SyntaxLocat
     SyntaxLocation::SourceFile
 }
 
-// TODO we should not count for braces in comments :-)
-pub fn is_action_block(text: &str, line_nr: usize, char_nr: usize) -> bool {
-    let mut brace_count = 0;
-    for (i, line) in text.lines().enumerate() {
-        if i == line_nr {
-            let last_line = line.to_string();
-            for (i, c) in last_line.chars().enumerate() {
-                if i >= char_nr {
-                    break;
-                }
-                if c == '{' {
-                    brace_count += 1;
-                }
-                if c == '}' {
-                    brace_count -= 1;
-                }
-            }
-            break;
-        } else {
-            brace_count += line.matches("{").count();
-            brace_count -= line.matches("}").count();
-        }
-    }
-
-    brace_count > 0
-}
-
-/*
-fn is_args(line_str: &str, char_nr: usize) -> bool {
-    let mut res = false;
-    if let Some(line_upto_char) = line_str.get(0..char_nr) {
-        res = line_upto_char.ends_with("args.");
-    }
-    res
-}
-*/
-
 pub fn is_argument(line_str: &str, char_nr: usize) -> Option<String> {
     if let Some(last_word) = line_str
         .get(0..=char_nr)
