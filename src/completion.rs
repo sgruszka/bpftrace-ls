@@ -582,6 +582,38 @@ fn unpack_text_document_info(content: json::JsonValue) -> (String, usize, usize)
     (uri, line_nr, char_nr)
 }
 
+macro_rules! get_document_state {
+    ($text_doc:ident, $line_nr:ident, $char_nr:ident, $none:expr, $log:ident) => {{
+        let Some(tree) = &$text_doc.syntax_tree else {
+            return $none;
+        };
+
+        let text = &$text_doc.text;
+
+        let log_str = match $log {
+            COMPL => "Completion",
+            HOVER => "Hover",
+            _ => "",
+        };
+
+        let line_str = text.lines().nth($line_nr).unwrap_or_default();
+        log_dbg!(
+            $log,
+            "{} for line {}: '{}', char at {}: '{}'",
+            log_str,
+            $line_nr,
+            line_str,
+            $char_nr,
+            line_str.chars().nth($char_nr).unwrap_or_default()
+        );
+
+        let (loc, node) = parser::find_syntax_location(text, tree, $line_nr, $char_nr);
+        log_dbg!($log, "{}: found syntax location: {:?}", log_str, loc);
+
+        (text, loc, node, line_str)
+    }};
+}
+
 #[allow(clippy::collapsible_else_if)]
 pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     let (uri, line_nr, char_nr) = unpack_text_document_info(content);
@@ -590,23 +622,8 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
         return encode_no_completion();
     };
 
-    let text = &text_doc.text;
-    let Some(tree) = &text_doc.syntax_tree else {
-        return encode_no_completion();
-    };
-
-    let (loc, node) = parser::find_syntax_location(text, tree, line_nr, char_nr);
-    log_dbg!(COMPL, "Found syntax location: {:?}", loc);
-
-    let line_str = text.lines().nth(line_nr).unwrap_or_default();
-    log_dbg!(
-        COMPL,
-        "Complete for line {}: '{}' at char {}: '{}'",
-        line_nr,
-        line_str,
-        char_nr,
-        line_str.chars().nth(char_nr).unwrap_or_default()
-    );
+    let (text, loc, node, line_str) =
+        get_document_state!(text_doc, line_nr, char_nr, encode_no_completion(), COMPL);
 
     if loc == SyntaxLocation::Action {
         if let Some(args) = parser::is_argument(line_str, char_nr) {
@@ -714,21 +731,8 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         return data;
     };
 
-    let text = &text_doc.text;
-    let Some(_tree) = &text_doc.syntax_tree else {
-        return data;
-    };
-    log_vdbg!(HOVER, "This is the text:\n'{}'", text);
-
-    let line_str = text.lines().nth(line_nr).unwrap_or_default();
-    log_dbg!(
-        HOVER,
-        "Hover for line {}: '{}' at char {}: '{}'",
-        line_nr,
-        line_str,
-        char_nr,
-        line_str.chars().nth(char_nr).unwrap_or_default()
-    );
+    let (text, _loc, _node, line_str) =
+        get_document_state!(text_doc, line_nr, char_nr, data, HOVER);
 
     let found = find_hover_str(
         line_str,
