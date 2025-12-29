@@ -122,7 +122,7 @@ pub fn find_syntax_location<'t>(
 
 pub fn find_error_location<'t>(
     text: &str,
-    tree: &'t Tree,
+    root_node: &Node<'t>,
     line_nr: usize,
     char_nr: usize,
 ) -> Option<Node<'t>> {
@@ -136,7 +136,7 @@ pub fn find_error_location<'t>(
         .expect("Error creating query"); // TODO
 
     let mut query_cursor = QueryCursor::new();
-    let mut matches = query_cursor.matches(&query, tree.root_node(), text.as_bytes());
+    let mut matches = query_cursor.matches(&query, *root_node, text.as_bytes());
 
     'matches_loop: while let Some(m) = matches.next() {
         for cap in m.captures {

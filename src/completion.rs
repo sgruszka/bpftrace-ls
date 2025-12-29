@@ -11,7 +11,7 @@ use crate::btf_mod::{
 use crate::cmd_mod::bpftrace_command;
 use crate::gen::completion::{bpftrace_probe_providers, bpftrace_stdlib_functions};
 use crate::log_mod::{self, COMPL, HOVER};
-use crate::parser::{self, find_error_location, SyntaxLocation};
+use crate::parser::{self, SyntaxLocation};
 use crate::DOCUMENTS_STATE;
 use crate::{log_dbg, log_err, log_vdbg};
 use btf_rs::Btf;
@@ -591,7 +591,6 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     };
 
     let text = &text_doc.text;
-
     let Some(tree) = &text_doc.syntax_tree else {
         return encode_no_completion();
     };
@@ -602,7 +601,8 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     let line_str = text.lines().nth(line_nr).unwrap_or_default();
     log_dbg!(
         COMPL,
-        "Complete for line: '{}' at char {} : '{}'",
+        "Complete for line {}: '{}' at char {}: '{}'",
+        line_nr,
         line_str,
         char_nr,
         line_str.chars().nth(char_nr).unwrap_or_default()
@@ -627,7 +627,7 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
 
     if loc == SyntaxLocation::SourceFile && node.has_error() {
         if let Some(args) = parser::is_argument(line_str, char_nr) {
-            if let Some(error_node) = find_error_location(text, tree, line_nr, char_nr) {
+            if let Some(error_node) = parser::find_error_location(text, &node, line_nr, char_nr) {
                 let probe = parser::find_probe_for_error(&error_node, text);
                 if !probe.is_empty() {
                     log_dbg!(COMPL, "Found probe {}", probe);
@@ -715,15 +715,20 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
     };
 
     let text = &text_doc.text;
-
     let Some(_tree) = &text_doc.syntax_tree else {
-        return encode_no_completion();
+        return data;
     };
-
     log_vdbg!(HOVER, "This is the text:\n'{}'", text);
 
     let line_str = text.lines().nth(line_nr).unwrap_or_default();
-    log_dbg!(HOVER, "Hover for line '{}'", &line_str);
+    log_dbg!(
+        HOVER,
+        "Hover for line {}: '{}' at char {}: '{}'",
+        line_nr,
+        line_str,
+        char_nr,
+        line_str.chars().nth(char_nr).unwrap_or_default()
+    );
 
     let found = find_hover_str(
         line_str,
