@@ -112,6 +112,10 @@ fn resolve_struct(btf: &Btf, base_id: u32) -> Option<ResolvedBtfItem> {
                 id = ptr.get_type_id().unwrap_or_default();
                 continue;
             }
+            Type::TypeTag(tt) => {
+                id = tt.get_type_id().unwrap_or_default();
+                continue;
+            }
             Type::Struct(st) => {
                 type_vec.push("struct".to_string());
                 break st;
@@ -160,6 +164,10 @@ fn resolve_union(btf: &Btf, base_id: u32) -> Option<ResolvedBtfItem> {
                 id = ptr.get_type_id().unwrap_or_default();
                 continue;
             }
+            Type::TypeTag(tt) => {
+                id = tt.get_type_id().unwrap_or_default();
+                continue;
+            }
             Type::Union(u) => {
                 type_vec.push("union".to_string());
                 break u;
@@ -191,12 +199,18 @@ fn resolve_union(btf: &Btf, base_id: u32) -> Option<ResolvedBtfItem> {
 
 fn resolve_pointer(btf: &Btf, ptr: &btf::Ptr, item: &mut ResolvedBtfItem) {
     let chained_type = btf.resolve_chained_type(ptr).unwrap();
+    let mut tag = None;
 
     let final_type = match chained_type {
         Type::Const(c) => {
             item.type_vec.push("const".to_string());
             item.type_id = c.get_type_id().unwrap_or_default();
             btf.resolve_chained_type(&c).unwrap()
+        }
+        Type::TypeTag(tt) => {
+            tag = Some(btf.resolve_name(&tt).unwrap_or_default());
+            item.type_id = tt.get_type_id().unwrap_or_default();
+            btf.resolve_chained_type(&tt).unwrap()
         }
         other => {
             item.type_id = ptr.get_type_id().unwrap_or_default();
@@ -218,6 +232,11 @@ fn resolve_pointer(btf: &Btf, ptr: &btf::Ptr, item: &mut ResolvedBtfItem) {
         }
         x => log_dbg!(BTFRE, "{} {}: Unhandled type {:?}", file!(), line!(), x),
     };
+
+    if let Some(tag_str) = tag {
+        item.type_vec.push(tag_str.to_owned());
+    }
+
     if !is_func_ptr {
         item.type_vec.push("*".to_string());
     }
