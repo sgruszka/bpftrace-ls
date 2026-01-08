@@ -265,6 +265,34 @@ fn encode_code_action(content: json::JsonValue) -> json::JsonValue {
     data
 }
 
+fn do_parser_diagnostics(text: &str, root_node: &tree_sitter::Node) -> json::JsonValue {
+    let parse_errors = parser::find_errors(text, root_node);
+
+    let mut diagnostics = json::JsonValue::new_array();
+    for err_node in parse_errors {
+        let start = err_node.start_position();
+        let end = err_node.end_position();
+
+        let line_nr = start.row.saturating_add(1);
+        let char_nr = start.column;
+
+        let end_line_nr = end.row.saturating_add(1);
+        let end_char_nr = end.column;
+
+        let diag = object! {
+            "range": {
+                "start": { "line": line_nr, "character": char_nr },
+                 "end": { "line": end_line_nr, "character": end_char_nr },
+            },
+            "severity": 1,
+            "source": "parser",
+            "message": format!("Parse error"),
+        };
+        let _ = diagnostics.push(diag);
+    }
+    diagnostics
+}
+
 // Parse single line errors:
 // stdin:6:60-69: ERROR: str() expects an integer or a pointer type as first argument (struct _tracepoint_syscalls_sys_exit_bpf provided)
 fn bpftrace_diag_single_line_error(
@@ -699,7 +727,12 @@ fn thread_diagnostics(
                         continue;
                     }
 
-                    let diagnostics = do_diagnotics(&text_doc.text);
+                    let diagnostics = match &text_doc.syntax_tree {
+                        Some(tree) if tree.root_node().has_error() => {
+                            do_parser_diagnostics(&text_doc.text, &tree.root_node())
+                        }
+                        _ => do_diagnotics(&text_doc.text),
+                    };
 
                     let diag_msg = DiagnosticsResutls {
                         uri,

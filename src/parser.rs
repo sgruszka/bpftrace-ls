@@ -155,6 +155,40 @@ pub fn find_error_location<'t>(
     None
 }
 
+pub fn find_errors<'t>(text: &str, root_node: &Node<'t>) -> Vec<Node<'t>> {
+    let query_str = r#"
+    [
+        (ERROR) @ERROR
+        (MISSING) @MISSING
+    ]
+    "#;
+
+    let query = Query::new(&tree_sitter_bpftrace::LANGUAGE.into(), query_str)
+        .expect("Error creating query"); // TODO
+
+    let mut query_cursor = QueryCursor::new();
+    let mut matches = query_cursor.matches(&query, *root_node, text.as_bytes());
+
+    let mut results: Vec<Node> = vec![];
+
+    let mut last_end: isize = -1;
+    while let Some(m) = matches.next() {
+        for cap in m.captures {
+            let node = cap.node;
+
+            let end = node.end_position();
+            let line_nr = end.row as isize;
+
+            if line_nr > last_end {
+                results.push(node);
+                last_end = line_nr;
+            }
+        }
+    }
+
+    results
+}
+
 pub fn find_probe_for_action(action: &Node, text: &str) -> String {
     assert_eq!(action.kind(), "action");
 
