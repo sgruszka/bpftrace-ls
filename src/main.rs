@@ -266,12 +266,12 @@ fn encode_code_action(content: json::JsonValue) -> json::JsonValue {
 }
 
 fn do_parser_diagnostics(text: &str, root_node: &tree_sitter::Node) -> json::JsonValue {
-    let parse_errors = parser::find_errors(text, root_node);
+    let error_nodes = parser::find_errors(text, root_node);
 
     let mut diagnostics = json::JsonValue::new_array();
-    for err_node in parse_errors {
-        let start = err_node.start_position();
-        let end = err_node.end_position();
+    for node in error_nodes {
+        let start = node.start_position();
+        let end = node.end_position();
 
         let line_nr = start.row.saturating_add(1);
         let char_nr = start.column;
@@ -279,7 +279,7 @@ fn do_parser_diagnostics(text: &str, root_node: &tree_sitter::Node) -> json::Jso
         let end_line_nr = end.row.saturating_add(1);
         let end_char_nr = end.column;
 
-        let diag = object! {
+        let mut diag = object! {
             "range": {
                 "start": { "line": line_nr, "character": char_nr },
                  "end": { "line": end_line_nr, "character": end_char_nr },
@@ -288,6 +288,12 @@ fn do_parser_diagnostics(text: &str, root_node: &tree_sitter::Node) -> json::Jso
             "source": "parser",
             "message": format!("Parse error"),
         };
+
+        if node.is_missing() {
+            diag["message"] = format!("Missing '{}'", node.kind()).into();
+        } else {
+            diag["message"] = "Parse error".into();
+        }
         let _ = diagnostics.push(diag);
     }
     diagnostics
