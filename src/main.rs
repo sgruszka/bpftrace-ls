@@ -409,7 +409,7 @@ fn bpftrace_diag_definitions_error(
     Ok(diag)
 }
 
-fn do_diagnotics(text: &str) -> json::JsonValue {
+fn do_bpftrace_diagnostics(text: &str) -> json::JsonValue {
     let mut diagnostics = json::JsonValue::new_array();
 
     let output = if let Ok(ok_output) = cmd_mod::bpftrace_dry_run_command(text) {
@@ -731,7 +731,7 @@ fn thread_diagnostics(
                         Some(tree) if tree.root_node().has_error() => {
                             do_parser_diagnostics(&text_doc.text, &tree.root_node())
                         }
-                        _ => do_diagnotics(&text_doc.text),
+                        _ => do_bpftrace_diagnostics(&text_doc.text),
                     };
 
                     let diag_msg = DiagnosticsResutls {
