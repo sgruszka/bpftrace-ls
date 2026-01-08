@@ -107,6 +107,7 @@ pub fn create_logger(filename: &str) -> Result<(), std::io::Error> {
                         "NOTIF" => mask |= NOTIF,
                         "HOVER" => mask |= HOVER,
                         "BTFRE" => mask |= BTFRE,
+                        "PARSE" => mask |= PARSE,
                         _ => {} // ignore unknown components
                     }
                 }
