@@ -850,7 +850,8 @@ mod tests {
         let mut n = 0;
         for (i, arg) in args_by_cmd.lines().enumerate() {
             if i == 0 {
-                assert!(arg == s);
+                // fentry vs kfunc, the rest after colon must be the same
+                assert!(arg.split_once(":").map(|x| x.1) == s.split_once(":").map(|x| x.1));
                 continue;
             }
 
