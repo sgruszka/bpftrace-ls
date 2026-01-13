@@ -735,7 +735,11 @@ fn thread_diagnostics(
 
                     let diagnostics = match &text_doc.syntax_tree {
                         Some(tree) if tree.root_node().has_error() => {
-                            do_parser_diagnostics(&text_doc.text, &tree.root_node())
+                            if cfg!(feature = "parser_diagnostics") {
+                                do_parser_diagnostics(&text_doc.text, &tree.root_node())
+                            } else {
+                                do_bpftrace_diagnostics(&text_doc.text)
+                            }
                         }
                         _ => do_bpftrace_diagnostics(&text_doc.text),
                     };

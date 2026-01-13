@@ -3,6 +3,9 @@ name = "bpftrace-ls"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+parser_diagnostics = []
+
 [dependencies]
 btf-rs = "1.1.1"
 json = "0.12.4"
