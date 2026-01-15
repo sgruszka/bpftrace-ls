@@ -271,7 +271,7 @@ pub fn find_location(tree: &Tree, line_nr: usize, char_nr: usize) -> SyntaxLocat
 pub fn is_argument(line_str: &str, char_nr: usize) -> Option<String> {
     if let Some(last_word) = line_str
         .get(0..=char_nr)
-        .and_then(|line_upto_char| line_upto_char.rsplit([' ', '{', '(', ',']).next())
+        .and_then(|line_upto_char| line_upto_char.rsplit([' ', '[', '{', '(', ',']).next())
     {
         if last_word.starts_with("args.") {
             return Some(last_word.to_string());
