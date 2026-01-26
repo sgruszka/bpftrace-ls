@@ -273,10 +273,10 @@ fn do_parser_diagnostics(text: &str, root_node: &tree_sitter::Node) -> json::Jso
         let start = node.start_position();
         let end = node.end_position();
 
-        let line_nr = start.row.saturating_add(1);
+        let line_nr = start.row;
         let char_nr = start.column;
 
-        let end_line_nr = end.row.saturating_add(1);
+        let end_line_nr = end.row;
         let end_char_nr = end.column;
 
         let mut diag = object! {
