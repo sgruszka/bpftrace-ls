@@ -461,19 +461,7 @@ fn do_bpftrace_diagnostics(text: &str) -> json::JsonValue {
     diagnostics
 }
 
-fn send_diag_command(uri: String, diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
-    let Some(text_doc) = DOCUMENTS_STATE.get(&uri) else {
-        log_dbg!(DIAGN, "No text document for {}", uri);
-        return;
-    };
-
-    if text_doc.text.trim().is_empty() {
-        log_dbg!(DIAGN, "No diagnostics for empty text {}", text_doc.text);
-        return;
-    }
-
-    let version = text_doc.version;
-
+fn send_diag_command(uri: String, version: u64, diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
     log_dbg!(
         DIAGN,
         "Send diagnostics command for uri {} version {}",
@@ -484,6 +472,38 @@ fn send_diag_command(uri: String, diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
     let diag_req = DiagnosticsRequest { uri, version };
 
     let _ = diag_tx.send(DiagnosticsCommand::DiagRequest(diag_req));
+}
+
+fn do_diagnostics(uri: String, diag_tx: &mpsc::Sender<DiagnosticsCommand>) -> Option<String> {
+    let Some(text_doc) = DOCUMENTS_STATE.get(&uri) else {
+        log_dbg!(DIAGN, "No text document for {}", uri);
+        return None;
+    };
+
+    if text_doc.text.trim().is_empty() {
+        log_dbg!(DIAGN, "No diagnostics for empty text {}", text_doc.text);
+        return None;
+    }
+
+    let version = text_doc.version;
+
+    // If there are parser errors publish those
+    if let Some(tree) = &text_doc.syntax_tree {
+        if cfg!(feature = "parser_diagnostics") && tree.root_node().has_error() {
+            let diagnostics = do_parser_diagnostics(&text_doc.text, &tree.root_node());
+            let diag_results = DiagnosticsResutls {
+                uri,
+                version,
+                diagnostics,
+            };
+
+            return publish_diagnostics(diag_results);
+        }
+    }
+
+    // Otherwise send command to diffrent thread to do bpftrace --dry-run for diagnostics
+    send_diag_command(uri, version, diag_tx);
+    None
 }
 
 fn send_diag_exit(diag_tx: &mpsc::Sender<DiagnosticsCommand>) {
@@ -733,16 +753,7 @@ fn thread_diagnostics(
                         continue;
                     }
 
-                    let diagnostics = match &text_doc.syntax_tree {
-                        Some(tree) if tree.root_node().has_error() => {
-                            if cfg!(feature = "parser_diagnostics") {
-                                do_parser_diagnostics(&text_doc.text, &tree.root_node())
-                            } else {
-                                do_bpftrace_diagnostics(&text_doc.text)
-                            }
-                        }
-                        _ => do_bpftrace_diagnostics(&text_doc.text),
-                    };
+                    let diagnostics = do_bpftrace_diagnostics(&text_doc.text);
 
                     let diag_msg = DiagnosticsResutls {
                         uri,
@@ -795,7 +806,10 @@ fn handle_client_msg(
             // TODO consider moving this to handle notification
             match notif_action {
                 NotificationAction::SendDiagnostics(uri) => {
-                    send_diag_command(uri, diag_tx);
+                    if let Some(s) = do_diagnostics(uri, diag_tx) {
+                        log_dbg!(DIAGN, "Send diagnostics: {}", s);
+                        send_message(s);
+                    }
                 }
                 NotificationAction::Exit => {
                     log_dbg!(PROTO, "Exiting");
