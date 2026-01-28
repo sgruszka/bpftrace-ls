@@ -171,18 +171,10 @@ pub fn find_errors<'t>(text: &str, root_node: &Node<'t>) -> Vec<Node<'t>> {
 
     let mut results: Vec<Node> = vec![];
 
-    let mut last_end: isize = -1;
     while let Some(m) = matches.next() {
         for cap in m.captures {
             let node = cap.node;
-
-            let end = node.end_position();
-            let line_nr = end.row as isize;
-
-            if line_nr > last_end {
-                results.push(node);
-                last_end = line_nr;
-            }
+            results.push(node);
         }
     }
 

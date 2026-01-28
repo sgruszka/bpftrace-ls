@@ -289,7 +289,7 @@ fn do_parser_diagnostics(text: &str, root_node: &tree_sitter::Node) -> json::Jso
             "message": format!("Parse error"),
         };
 
-        if node.is_missing() {
+        if node.is_missing() && node.kind().len() == 1 {
             diag["message"] = format!("Missing '{}'", node.kind()).into();
         } else {
             diag["message"] = "Parse error".into();
