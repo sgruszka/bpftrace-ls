@@ -198,8 +198,14 @@ fn resolve_union(btf: &Btf, base_id: u32) -> Option<ResolvedBtfItem> {
 }
 
 fn resolve_pointer(btf: &Btf, ptr: &btf::Ptr, item: &mut ResolvedBtfItem) {
-    let chained_type = btf.resolve_chained_type(ptr).unwrap();
+    let mut chained_type = btf.resolve_chained_type(ptr).unwrap();
     let mut tag = None;
+    let mut num_ptrs = 1;
+
+    while let Type::Ptr(p) = chained_type {
+        chained_type = btf.resolve_chained_type(&p).unwrap();
+        num_ptrs += 1;
+    }
 
     let final_type = match chained_type {
         Type::Const(c) => {
@@ -237,8 +243,9 @@ fn resolve_pointer(btf: &Btf, ptr: &btf::Ptr, item: &mut ResolvedBtfItem) {
         item.type_vec.push(tag_str.to_owned());
     }
 
+    // TODO handle num_ptrs > 1 for function pointer
     if !is_func_ptr {
-        item.type_vec.push("*".to_string());
+        item.type_vec.push("*".repeat(num_ptrs).to_string());
     }
 }
 
