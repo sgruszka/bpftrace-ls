@@ -80,14 +80,15 @@ fn resolve_struct_member(btf: &Btf, member: &btf::Member, id: u32) -> ResolvedBt
         children_vec: Vec::new(),
     };
 
-    match btf.resolve_type_by_id(id).unwrap() {
-        Type::Ptr(ptr) => resolve_pointer(btf, &ptr, &mut item),
-        Type::Struct(st) => get_struct_type_vec(btf, &st, &mut item.type_vec),
-        Type::Union(u) => get_union_type_vec(btf, &u, &mut item.type_vec),
-        Type::Int(i) => get_int_type_vec(btf, &i, &mut item.type_vec),
-        Type::Typedef(t) => get_typedef_type_vec(btf, &t, &mut item.type_vec),
-        Type::Array(a) => get_array_type_vec(btf, &a, &mut item.type_vec),
-        x => log_dbg!(BTFRE, "Unhandled member {:?}", x),
+    match btf.resolve_type_by_id(id) {
+        Ok(Type::Ptr(ptr)) => resolve_pointer(btf, &ptr, &mut item),
+        Ok(Type::Struct(st)) => get_struct_type_vec(btf, &st, &mut item.type_vec),
+        Ok(Type::Union(u)) => get_union_type_vec(btf, &u, &mut item.type_vec),
+        Ok(Type::Int(i)) => get_int_type_vec(btf, &i, &mut item.type_vec),
+        Ok(Type::Typedef(t)) => get_typedef_type_vec(btf, &t, &mut item.type_vec),
+        Ok(Type::Array(a)) => get_array_type_vec(btf, &a, &mut item.type_vec),
+        Ok(x) => log_dbg!(BTFRE, "Unhandled member {:?}", x),
+        Err(_) => log_err!("Failed to resolve BTF id {}", id),
     };
 
     item
@@ -101,7 +102,7 @@ fn resolve_struct(btf: &Btf, base_id: u32) -> Option<ResolvedBtfItem> {
         if id == 0 {
             return None;
         }
-        match btf.resolve_type_by_id(id).unwrap() {
+        match btf.resolve_type_by_id(id).ok()? {
             Type::Const(c) => {
                 type_vec.push("const".to_string());
                 id = c.get_type_id().unwrap_or_default();
@@ -153,7 +154,7 @@ fn resolve_union(btf: &Btf, base_id: u32) -> Option<ResolvedBtfItem> {
         if id == 0 {
             return None;
         }
-        match btf.resolve_type_by_id(id).unwrap() {
+        match btf.resolve_type_by_id(id).ok()? {
             Type::Const(c) => {
                 type_vec.push("const".to_string());
                 id = c.get_type_id().unwrap_or_default();
@@ -256,42 +257,42 @@ fn resolve_type_id(btf: &Btf, id: u32, param_item: &mut ResolvedBtfItem) {
             break;
         }
 
-        // TOOD: Fix unwrap();
-        match btf.resolve_type_by_id(type_id).unwrap() {
-            Type::Const(c) => {
+        match btf.resolve_type_by_id(type_id) {
+            Ok(Type::Const(c)) => {
                 param_item.type_vec.push("const".to_string());
                 type_id = c.get_type_id().unwrap_or_default();
                 continue;
             }
-            Type::Volatile(v) => {
+            Ok(Type::Volatile(v)) => {
                 param_item.type_vec.push("volatile".to_string());
                 type_id = v.get_type_id().unwrap_or_default();
                 continue;
             }
-            Type::Ptr(ptr) => {
+            Ok(Type::Ptr(ptr)) => {
                 param_item.type_id = ptr.get_type_id().unwrap_or_default();
                 resolve_pointer(btf, &ptr, param_item);
                 break;
             }
-            Type::Typedef(td) => {
+            Ok(Type::Typedef(td)) => {
                 param_item.type_id = td.get_type_id().unwrap_or_default();
                 get_typedef_type_vec(btf, &td, &mut param_item.type_vec);
                 break;
             }
-            Type::Int(i) => {
+            Ok(Type::Int(i)) => {
                 param_item.type_id = i.get_type_id().unwrap_or_default();
                 get_int_type_vec(btf, &i, &mut param_item.type_vec);
                 break;
             }
-            Type::Enum(e) => {
+            Ok(Type::Enum(e)) => {
                 param_item.type_id = e.get_type_id().unwrap_or_default();
                 get_enum_type_vec(btf, &e, &mut param_item.type_vec);
                 break;
             }
-            x => {
+            Ok(x) => {
                 log_dbg!(BTFRE, "Unhandled type {:?}", x);
                 break;
             }
+            Err(_) => log_err!("Failed to resolve BTF id {}", id),
         }
     }
 }
@@ -302,8 +303,8 @@ fn resolve_func_parameters(
     item: &mut ResolvedBtfItem,
     need_retval: bool,
 ) {
-    let proto = match btf.resolve_chained_type(&func).unwrap() {
-        Type::FuncProto(proto) => proto,
+    let proto = match btf.resolve_chained_type(&func).ok() {
+        Some(Type::FuncProto(proto)) => proto,
         x => {
             log_dbg!(BTFRE, "Resolved type is not a function proto, is {:?}", x);
             return;
@@ -346,15 +347,16 @@ fn resolve_parameter(btf: &Btf, param: &btf::Parameter) -> ResolvedBtfItem {
     };
 
     // TODO other parameters types, merge with resolve_struct_member
-    match btf.resolve_chained_type(param).unwrap() {
-        Type::Ptr(ptr) => resolve_pointer(btf, &ptr, &mut parameter_item),
-        Type::Int(i) => get_int_type_vec(btf, &i, &mut parameter_item.type_vec),
-        Type::Typedef(t) => get_typedef_type_vec(btf, &t, &mut parameter_item.type_vec),
-        Type::Union(u) => get_union_type_vec(btf, &u, &mut parameter_item.type_vec),
-        x => {
+    match btf.resolve_chained_type(param) {
+        Ok(Type::Ptr(ptr)) => resolve_pointer(btf, &ptr, &mut parameter_item),
+        Ok(Type::Int(i)) => get_int_type_vec(btf, &i, &mut parameter_item.type_vec),
+        Ok(Type::Typedef(t)) => get_typedef_type_vec(btf, &t, &mut parameter_item.type_vec),
+        Ok(Type::Union(u)) => get_union_type_vec(btf, &u, &mut parameter_item.type_vec),
+        Ok(x) => {
             log_dbg!(BTFRE, "Unhandled type {:?}", x);
             return parameter_item;
         }
+        Err(_) => log_err!("Failed to resolve BTF parameter {:?}", param),
     };
     parameter_item
 }
@@ -365,8 +367,8 @@ fn is_pointer_type(btf: &Btf, base_id: u32) -> bool {
         if id == 0 {
             return false;
         }
-        // TOOD: Fix unwrap();
-        match btf.resolve_type_by_id(id).unwrap() {
+
+        match btf.resolve_type_by_id(id).unwrap_or(Type::Void) {
             Type::Const(c) => {
                 id = c.get_type_id().unwrap_or_default();
                 continue;
@@ -391,8 +393,15 @@ pub fn btf_resolve_func(btf: &Btf, name: &str, need_retval: bool) -> Option<Reso
         log_err!("Looking for {} failed with {:?}", name, err);
         return None;
     }
-    let func = match btf.resolve_types_by_name(name).unwrap().pop().unwrap() {
-        Type::Func(func) => func,
+
+    let mut func_vec = btf.resolve_types_by_name(name).ok()?;
+    // TODO what todo if more then one function ?
+    if func_vec.len() != 1 {
+        return None;
+    }
+
+    let func = match func_vec.pop() {
+        Some(Type::Func(func)) => func,
         x => {
             log_dbg!(BTFRE, "Resolved type is not a function, it's {:?}", x);
             return None;
@@ -412,7 +421,7 @@ pub fn btf_resolve_func(btf: &Btf, name: &str, need_retval: bool) -> Option<Reso
 }
 
 pub fn btf_setup_module(module: &str) -> Option<Btf> {
-    let btf_base = Btf::from_file("/sys/kernel/btf/vmlinux").unwrap();
+    let btf_base = Btf::from_file("/sys/kernel/btf/vmlinux").ok()?;
     if module.is_empty() || module == "vmlinux" {
         return Some(btf_base);
     }
@@ -473,8 +482,8 @@ pub fn btf_iterate_over_names_chain(
     let mut names_iter = names_chain_vec.iter().peekable();
 
     if let Some(first_name) = names_iter.next() {
-        let func_proto = match btf.resolve_type_by_id(func.type_id).unwrap() {
-            Type::FuncProto(proto) => proto,
+        let func_proto = match btf.resolve_type_by_id(func.type_id).ok() {
+            Some(Type::FuncProto(proto)) => proto,
             x => {
                 log_dbg!(BTFRE, "Resolved type is not a function proto, is {:?}", x);
                 return None;
@@ -520,9 +529,7 @@ pub fn btf_iterate_over_names_chain(
             let member_name = if let Some(name) = names_iter_peek.next() {
                 name
             } else {
-                if *names_chain_vec.last().unwrap() == "->"
-                    || *names_chain_vec.last().unwrap() == "."
-                {
+                if names_chain_vec.last() == Some(&"->") || names_chain_vec.last() == Some(&".") {
                     break;
                 }
                 return None;
@@ -534,16 +541,16 @@ pub fn btf_iterate_over_names_chain(
                     return None;
                 }
 
-                match btf.resolve_type_by_id(type_id).unwrap() {
-                    Type::Const(c) => {
+                match btf.resolve_type_by_id(type_id) {
+                    Ok(Type::Const(c)) => {
                         type_id = c.get_type_id().unwrap_or_default();
                         continue;
                     }
-                    Type::Ptr(ptr) => {
+                    Ok(Type::Ptr(ptr)) => {
                         type_id = ptr.get_type_id().unwrap_or_default();
                         continue;
                     }
-                    Type::Struct(st) => {
+                    Ok(Type::Struct(st)) => {
                         let member = st
                             .members
                             .iter()
@@ -553,7 +560,7 @@ pub fn btf_iterate_over_names_chain(
                         last_name = member_name;
                         break;
                     }
-                    Type::Union(u) => {
+                    Ok(Type::Union(u)) => {
                         let member = u
                             .members
                             .iter()
@@ -567,10 +574,11 @@ pub fn btf_iterate_over_names_chain(
                     // Type::Int(i) =>(),  /* get_int_type_vec(btf, &i, &mut item.type_vec), */
                     // Type::Typedef(t) =>(),  /* get_typedef_type_vec(btf, &t, &mut item.type_vec), */
                     // Type::Array(a) =>(),  /* get_array_type_vec(btf, &a, &mut item.type_vec), */
-                    x => {
+                    Ok(x) => {
                         log_dbg!(BTFRE, "Unhandled type {:?}", x);
                         return None;
                     }
+                    Err(_) => log_err!("Failed to resolve BTF type_id {}", type_id),
                 }
             }
         }
