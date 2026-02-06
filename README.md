@@ -2,9 +2,13 @@
 
 [LSP](https://microsoft.github.io/language-server-protocol/) Languge Server for [bpftrace](https://github.com/bpftrace/bpftrace)
 
-## Sudo configuration
-The server internally runs **sudo bpftrace**
-Therefore, you must allow to run bpftrace with sudo.
+## Configuration
+
+### bpftrace
+
+The server internally runs `bpftrace`, either directly or via `sudo`, depending if run as root user or not .
+If you run the server as ordinary user you need setup `sudo` to allow run  `bpftrace` without password.
+
 For example open a custom sudoers file:
 ```bash
 $ sudo visudo -f /etc/sudoers.d/bpftrace
@@ -13,20 +17,31 @@ $ sudo visudo -f /etc/sudoers.d/bpftrace
 And add below line:
 
 ```sudo
-user ALL=(root) NOPASSWD: /usr/bin/bpftrace
+thisuser ALL=(root) NOPASSWD: /usr/bin/bpftrace
 ```
 Replace user with your actual username and use correct path.
-You can check the path using which command.
+You can check those by below commands.
 
 ```bash
+$ whoami
+thisuser
 $ which bpftrace
 /usr/bin/bpftrace
+```
+
+### kernel
+
+[BTF](https://docs.kernel.org/bpf/btf.html) (BPF Type Format) is higly utilized by `bpftrace-ls` . 
+Is recommended to build your kernel with BTF support, by enabling below options:
+```
+CONFIG_DEBUG_INFO_BTF=y
+CONFIG_DEBUG_INFO_BTF_MODULES=y
 ```
 ## Using in Neovim
 
 ### Filetype detection
-Vim/Neovim does not currently provide built-in filetype detection for `bpftrace`.
-To enable automatic detection of `bpftrace` files, based on the `*.bt` extension or a proper shebang, you can add the following to your `init.lua`:
+Since Neovim 12 there is built-in filetype detection for `bpftrace`. If you are using older version
+you can add the following to your `init.lua` file to detect `bpftrace` files:
 ```lua
 vim.filetype.add({
   extension = {
