@@ -103,6 +103,11 @@ fn resolve_struct(btf: &Btf, base_id: u32) -> Option<ResolvedBtfItem> {
             return None;
         }
         match btf.resolve_type_by_id(id).ok()? {
+            Type::Array(a) => {
+                type_vec.push("[]".to_string());
+                id = a.get_type_id().unwrap_or_default();
+                continue;
+            }
             Type::Const(c) => {
                 type_vec.push("const".to_string());
                 id = c.get_type_id().unwrap_or_default();
@@ -208,21 +213,28 @@ fn resolve_pointer(btf: &Btf, ptr: &btf::Ptr, item: &mut ResolvedBtfItem) {
         num_ptrs += 1;
     }
 
-    let final_type = match chained_type {
-        Type::Const(c) => {
-            item.type_vec.push("const".to_string());
-            item.type_id = c.get_type_id().unwrap_or_default();
-            btf.resolve_chained_type(&c).unwrap()
-        }
-        Type::TypeTag(tt) => {
-            tag = Some(btf.resolve_name(&tt).unwrap_or_default());
-            item.type_id = tt.get_type_id().unwrap_or_default();
-            btf.resolve_chained_type(&tt).unwrap()
-        }
-        other => {
-            item.type_id = ptr.get_type_id().unwrap_or_default();
-            other
-        }
+    let final_type = loop {
+        match chained_type {
+            Type::Const(c) => {
+                item.type_vec.push("const".to_string());
+                item.type_id = c.get_type_id().unwrap_or_default();
+                chained_type = btf.resolve_chained_type(&c).unwrap();
+            }
+            Type::Volatile(v) => {
+                item.type_vec.push("volatile".to_string());
+                item.type_id = v.get_type_id().unwrap_or_default();
+                chained_type = btf.resolve_chained_type(&v).unwrap();
+            }
+            Type::TypeTag(tt) => {
+                tag = Some(btf.resolve_name(&tt).unwrap_or_default());
+                item.type_id = tt.get_type_id().unwrap_or_default();
+                chained_type = btf.resolve_chained_type(&tt).unwrap();
+            }
+            other => {
+                item.type_id = ptr.get_type_id().unwrap_or_default();
+                break other;
+            }
+        };
     };
 
     let is_func_ptr = matches!(final_type, Type::FuncProto(_));
@@ -286,6 +298,16 @@ fn resolve_type_id(btf: &Btf, id: u32, param_item: &mut ResolvedBtfItem) {
             Ok(Type::Enum(e)) => {
                 param_item.type_id = e.get_type_id().unwrap_or_default();
                 get_enum_type_vec(btf, &e, &mut param_item.type_vec);
+                break;
+            }
+            Ok(Type::Union(u)) => {
+                param_item.type_id = u.get_type_id().unwrap_or_default();
+                get_union_type_vec(btf, &u, &mut param_item.type_vec);
+                break;
+            }
+            Ok(Type::Struct(s)) => {
+                param_item.type_id = s.get_type_id().unwrap_or_default();
+                get_struct_type_vec(btf, &s, &mut param_item.type_vec);
                 break;
             }
             Ok(x) => {
