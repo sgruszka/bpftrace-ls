@@ -170,6 +170,31 @@ fn find_kfunc_args_by_btf(kfunc: &str, need_retval: bool) -> Option<(String, Res
     None
 }
 
+fn items_from_probe_args(probe_args_iter: Lines) -> json::JsonValue {
+    let mut items = json::JsonValue::new_array();
+
+    for arg in probe_args_iter {
+        let tokens: Vec<&str> = arg.split(" ").collect();
+        if tokens.len() <= 1 {
+            continue;
+        }
+        let end = tokens.len() - 1;
+
+        // let field = format!("args.{}", tokens[end]);
+        let field = tokens[end];
+        let _field_type = tokens[0..end].join(" ").to_string();
+        let completion = object! {
+            "label": field,
+            "kind" : 5,
+            "detail" : arg, //field_type.clone(),
+            // TODO
+            // "documentation" : field_type,
+        };
+        let _ = items.push(completion);
+    }
+    items
+}
+
 // Complete args. i.e. kfunc:xe:__fini_dbm { printf("%s\n", str(args.drm->driver->name)) }
 fn encode_completion_for_args_keyword(
     probe: &str,
@@ -217,27 +242,7 @@ fn encode_completion_for_args_keyword(
         log_dbg!(COMPL, "Found arguments using btf:\n{}", args_as_string);
     }
 
-    let mut items = json::JsonValue::new_array();
-
-    for arg in probe_args_iter {
-        let tokens: Vec<&str> = arg.split(" ").collect();
-        if tokens.len() <= 1 {
-            continue;
-        }
-        let end = tokens.len() - 1;
-
-        // let field = format!("args.{}", tokens[end]);
-        let field = tokens[end];
-        let _field_type = tokens[0..end].join(" ").to_string();
-        let completion = object! {
-            "label": field,
-            "kind" : 5,
-            "detail" : arg, //field_type.clone(),
-            // TODO
-            // "documentation" : field_type,
-        };
-        let _ = items.push(completion);
-    }
+    let items = items_from_probe_args(probe_args_iter);
 
     let is_incomplete = false; // Currently we provide complete list
     let data = object! {
