@@ -26,23 +26,19 @@ static AVAILABE_TRACES: OnceLock<Option<String>> = OnceLock::new();
 
 static FENTRY_KFUNC_NAME: OnceLock<&'static str> = OnceLock::new();
 
-fn btf_item_to_str(item: &ResolvedBtfItem) -> String {
+fn btf_item_to_str(item: &ResolvedBtfItem, with_name: bool) -> String {
     let mut s = item.type_vec.join(" ").to_string();
-    s.push_str(" ");
-    s.push_str(&item.name);
+    if with_name {
+        s.push_str(" ");
+        s.push_str(&item.name);
+    }
     s
 }
 
 fn children_to_vec_str(resolved: &ResolvedBtfItem) -> Vec<String> {
     let mut results: Vec<String> = Vec::new();
-    for child in &resolved.children_vec[..] {
-        let mut res_str = String::new();
-        for t in child.type_vec.iter() {
-            res_str.push_str(t);
-            res_str.push_str(" ");
-        }
-        res_str.push_str(&child.name);
-        results.push(res_str);
+    for child in resolved.children_vec.iter() {
+        results.push(btf_item_to_str(child, true));
     }
 
     results
@@ -170,6 +166,22 @@ fn find_kfunc_args_by_btf(kfunc: &str, need_retval: bool) -> Option<(String, Res
     None
 }
 
+fn items_from_resolved_btf(btf_item: &ResolvedBtfItem) -> json::JsonValue {
+    let mut items = json::JsonValue::new_array();
+
+    for child in btf_item.children_vec.iter() {
+        let completion = object! {
+            "label": child.name.clone(),
+            "kind" : 5,
+            "detail" : btf_item_to_str(child, false),
+            // TODO
+            // "documentation" : field_type,
+        };
+        let _ = items.push(completion);
+    }
+    items
+}
+
 fn items_from_probe_args(probe_args_iter: Lines) -> json::JsonValue {
     let mut items = json::JsonValue::new_array();
 
@@ -223,26 +235,25 @@ fn encode_completion_for_args_keyword(
         btf_probe_args = find_kfunc_args_by_btf(&kfunc, need_retval);
     }
 
-    let mut args_as_string = String::new();
-    let mut probe_args_iter: Lines = "".lines();
-    let probe_args;
+    let items = if args_with_fields.ends_with("args.") && !is_kfunc {
+        let probe_args = find_probe_args_by_command(probe);
+        let mut probe_args_iter = probe_args.lines();
 
-    if args_with_fields.ends_with("args.") && !is_kfunc {
-        probe_args = find_probe_args_by_command(probe);
-        probe_args_iter = probe_args.lines();
         // On first line of probe args is kfunc module and name
         probe_args_iter.next();
+        items_from_probe_args(probe_args_iter)
     } else if let Some((module, resolved_btf)) = btf_probe_args {
         let arg_btf = argument_next_item(module, resolved_btf, args_with_fields);
-        let args = children_to_vec_str(&arg_btf);
 
-        args_as_string.push_str(&args.join("\n"));
-        probe_args_iter = args_as_string.lines();
+        // For debug:
+        // let args = children_to_vec_str(&arg_btf);
+        // let args_as_string.push_str(&args.join("\n"));
+        // log_dbg!(COMPL, "Found arguments using btf:\n{}", args_as_string);
 
-        log_dbg!(COMPL, "Found arguments using btf:\n{}", args_as_string);
-    }
-
-    let items = items_from_probe_args(probe_args_iter);
+        items_from_resolved_btf(&arg_btf)
+    } else {
+        json::JsonValue::new_array()
+    };
 
     let is_incomplete = false; // Currently we provide complete list
     let data = object! {
@@ -769,7 +780,7 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         // log_dbg!(HOVER, "Resolved BTF {:?}", resolved_btf);
         let arg_btf = argument_next_item(module, resolved_btf, &found);
         // log_dbg!(HOVER, "ARG BTF {:?}", arg_btf);
-        let mut hover = btf_item_to_str(&arg_btf);
+        let mut hover = btf_item_to_str(&arg_btf, true);
         let args = children_to_vec_str(&arg_btf);
 
         hover.push_str("\n");
@@ -849,7 +860,7 @@ mod tests {
         };
 
         // for (i, c) in resolved_btf.children_vec.iter().enumerate() {
-        //     println!("{i}: '{}'", btf_item_to_str(c).trim());
+        //     println!("{i}: '{}'", btf_item_to_str(c, true).trim());
         // }
 
         let mut n = 0;
@@ -863,7 +874,7 @@ mod tests {
             assert!(resolved_btf.children_vec.len() > i - 1);
 
             let btf_item = &resolved_btf.children_vec[i - 1];
-            assert!(arg.trim() == btf_item_to_str(btf_item));
+            assert!(arg.trim() == btf_item_to_str(btf_item, true));
             n += 1;
         }
         assert!(resolved_btf.children_vec.len() == n);
