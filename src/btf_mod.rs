@@ -246,9 +246,7 @@ fn resolve_pointer(btf: &Btf, ptr: &btf::Ptr, item: &mut ResolvedBtfItem) {
         Type::Int(i) => get_int_type_vec(btf, &i, &mut item.type_vec),
         Type::Array(a) => get_array_type_vec(btf, &a, &mut item.type_vec),
         Type::FuncProto(fp) => get_func_proto_type_vec(btf, &fp, &mut item.type_vec),
-        Type::Void => {
-            item.type_vec.push("void".to_string());
-        }
+        Type::Void => item.type_vec.push("void".to_string()),
         x => log_dbg!(BTFRE, "{} {}: Unhandled type {:?}", file!(), line!(), x),
     };
 
