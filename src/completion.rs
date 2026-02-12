@@ -68,7 +68,9 @@ fn argument_next_item(
 
     if let Some(btf) = module_btf_map.get(&module) {
         if let Some(resolved) = btf_iterate_over_names_chain(btf, &resolved_func, this_argument) {
-            return resolved;
+            if let Some(var_type) = resolved.var_type {
+                return var_type;
+            }
         }
     }
 
@@ -781,13 +783,14 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         let arg_btf = argument_next_item(module, resolved_btf, &found);
         // log_dbg!(HOVER, "ARG BTF {:?}", arg_btf);
         let mut hover = btf_item_to_str(&arg_btf, true);
+
         let args = children_to_vec_str(&arg_btf);
 
         hover.push_str("\n");
         hover.push_str("\n");
         hover.push_str(&args.join("\n"));
 
-        log_dbg!(HOVER, "Hover:\n{:?}", hover);
+        log_vdbg!(HOVER, "Hover:\n{:?}", hover);
 
         data = object! {
               "result": {

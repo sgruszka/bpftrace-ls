@@ -264,6 +264,7 @@ fn resolve_type_id(btf: &Btf, id: u32, param_item: &mut ResolvedBtfItem) {
     let mut type_id = id;
     loop {
         if type_id == 0 {
+            param_item.type_vec.push("void".to_string());
             break;
         }
 
@@ -358,7 +359,7 @@ fn resolve_func_parameters(
     }
 }
 
-fn resolve_parameter(btf: &Btf, param: &btf::Parameter) -> ResolvedBtfItem {
+fn resolve_parameter(btf: &Btf, param: &btf::Parameter) -> Option<ResolvedBtfItem> {
     let mut parameter_item = ResolvedBtfItem {
         name: btf.resolve_name(param).unwrap_or_default(),
         type_vec: Vec::new(),
@@ -374,11 +375,14 @@ fn resolve_parameter(btf: &Btf, param: &btf::Parameter) -> ResolvedBtfItem {
         Ok(Type::Union(u)) => get_union_type_vec(btf, &u, &mut parameter_item.type_vec),
         Ok(x) => {
             log_dbg!(BTFRE, "Unhandled type {:?}", x);
-            return parameter_item;
+            return None;
         }
-        Err(_) => log_err!("Failed to resolve BTF parameter {:?}", param),
+        Err(_) => {
+            log_err!("Failed to resolve BTF parameter {:?}", param);
+            return None;
+        }
     };
-    parameter_item
+    Some(parameter_item)
 }
 
 fn is_pointer_type(btf: &Btf, base_id: u32) -> bool {
@@ -487,44 +491,57 @@ fn chain_str_to_tokens(names_chain: &str) -> Vec<&str> {
     res
 }
 
+pub struct ResolvedVariable {
+    pub var: ResolvedBtfItem,
+    pub var_type: Option<ResolvedBtfItem>,
+}
+
 pub fn btf_iterate_over_names_chain(
     btf: &Btf,
     func: &ResolvedBtfItem,
     names_chain_str: &str,
-) -> Option<ResolvedBtfItem> {
+) -> Option<ResolvedVariable> {
     let mut names_chain_vec = chain_str_to_tokens(names_chain_str);
+
     if names_chain_vec.len() >= 2 && names_chain_vec[0] == "args" && names_chain_vec[1] == "." {
         // Remove "args."
         names_chain_vec.remove(0);
         names_chain_vec.remove(0);
     }
 
+    let func_proto = match btf.resolve_type_by_id(func.type_id).ok() {
+        Some(Type::FuncProto(proto)) => proto,
+        x => {
+            log_dbg!(BTFRE, "Resolved type is not a function proto, is {:?}", x);
+            return None;
+        }
+    };
+
     let mut names_iter = names_chain_vec.iter().peekable();
-
     if let Some(first_name) = names_iter.next() {
-        let func_proto = match btf.resolve_type_by_id(func.type_id).ok() {
-            Some(Type::FuncProto(proto)) => proto,
-            x => {
-                log_dbg!(BTFRE, "Resolved type is not a function proto, is {:?}", x);
-                return None;
-            }
-        };
-
         let first_param = func_proto
             .parameters
             .iter()
-            .find(|&p| btf.resolve_name(p).unwrap().eq(first_name))?;
+            .find(|&p| btf.resolve_name(p).unwrap_or_default().eq(first_name))?;
 
         if names_iter.peek().is_none() {
-            let resolved_param = resolve_parameter(btf, first_param);
-            if let Some(mut r) = resolve_struct(btf, resolved_param.type_id) {
-                r.type_vec = resolved_param.type_vec;
-                return Some(r);
-            } else if let Some(mut r) = resolve_union(btf, resolved_param.type_id) {
-                r.type_vec = resolved_param.type_vec;
-                return Some(r);
+            let resolved_param = resolve_parameter(btf, first_param)?;
+
+            if let Some(resolved_struct) = resolve_struct(btf, resolved_param.type_id) {
+                return Some(ResolvedVariable {
+                    var: resolved_param,
+                    var_type: Some(resolved_struct),
+                });
+            } else if let Some(resolved_union) = resolve_union(btf, resolved_param.type_id) {
+                return Some(ResolvedVariable {
+                    var: resolved_param,
+                    var_type: Some(resolved_union),
+                });
             } else {
-                return Some(resolved_param);
+                return Some(ResolvedVariable {
+                    var: resolved_param,
+                    var_type: None,
+                });
             }
         }
 
@@ -598,27 +615,50 @@ pub fn btf_iterate_over_names_chain(
                         log_dbg!(BTFRE, "Unhandled type {:?}", x);
                         return None;
                     }
-                    Err(_) => log_err!("Failed to resolve BTF type_id {}", type_id),
+                    Err(_) => {
+                        log_err!("Failed to resolve BTF type_id {}", type_id);
+                        return None;
+                    }
                 }
             }
         }
 
-        if let Some(mut r) = resolve_struct(btf, type_id) {
-            r.name = last_name.to_string();
-            return Some(r);
-        }
-        if let Some(mut r) = resolve_union(btf, type_id) {
-            r.name = last_name.to_string();
-            return Some(r);
-        }
-        let mut item = ResolvedBtfItem {
+        let mut var_item = ResolvedBtfItem {
             name: last_name.to_string(),
             ..Default::default()
         };
-        resolve_type_id(btf, type_id, &mut item);
-        Some(item)
+        resolve_type_id(btf, type_id, &mut var_item);
+
+        if let Some(resolved_struct) = resolve_struct(btf, type_id) {
+            Some(ResolvedVariable {
+                var: var_item,
+                var_type: Some(resolved_struct),
+            })
+        } else if let Some(resolved_union) = resolve_union(btf, type_id) {
+            Some(ResolvedVariable {
+                var: var_item,
+                var_type: Some(resolved_union),
+            })
+        } else {
+            Some(ResolvedVariable {
+                var: var_item,
+                var_type: None,
+            })
+        }
     } else {
-        Some(func.clone())
+        // TODO remove duplication
+
+        // Function is already resolved
+        let func_item = ResolvedBtfItem {
+            name: func.name.clone(),
+            type_id: func.type_id,
+            ..Default::default()
+        };
+
+        Some(ResolvedVariable {
+            var: func_item,
+            var_type: Some(func.clone()),
+        })
     }
 }
 
@@ -673,13 +713,13 @@ mod tests {
         let base = btf_resolve_func(&btf, "alloc_pid", true).unwrap();
 
         let resolved = btf_iterate_over_names_chain(&btf, &base, "args.ns->rcu.next").unwrap();
-        assert!(resolved.name == "next");
-        assert!(resolved.children_vec[0].name == "next");
+        assert!(resolved.var.name == "next");
+        assert!(resolved.var_type.unwrap().children_vec[0].name == "next");
 
         let resolved_func = btf_iterate_over_names_chain(&btf, &base, "args.ns->rcu.func").unwrap();
-        assert!(resolved_func.name == "func");
+        assert!(resolved_func.var.name == "func");
         assert_eq!(
-            resolved_func.type_vec,
+            resolved_func.var.type_vec,
             vec!["void (*)( struct callback_head * )"]
         );
 
@@ -688,7 +728,7 @@ mod tests {
     }
 
     #[test]
-    fn test_iterate_over_dreference_chain() {
+    fn test_iterate_over_dereference_chain() {
         // vfs_open: path->dentry->d_inode->i_uid
         let btf = btf_setup_module("vmlinux").unwrap();
 
@@ -696,39 +736,42 @@ mod tests {
         assert!(base.name == "vfs_open");
 
         let resolved = btf_iterate_over_names_chain(&btf, &base, "").unwrap();
-        assert!(resolved.name == "vfs_open");
-        assert!(resolved.children_vec.len() == 3);
-        assert!(resolved.children_vec[0].name == "path");
-        assert!(resolved.children_vec[2].name == "retval");
+        let var_type = resolved.var_type.unwrap();
+        assert!(resolved.var.name == "vfs_open");
+        assert!(var_type.children_vec.len() == 3);
+        assert!(var_type.children_vec[0].name == "path");
+        assert!(var_type.children_vec[2].name == "retval");
 
         let resolved = btf_iterate_over_names_chain(&btf, &base, "args.path").unwrap();
-        assert!(resolved.name == "path");
-        assert!(resolved.type_vec == vec!["const", "struct", "path", "*"]);
-        assert!(resolved.children_vec.len() > 0);
+        let var_type = resolved.var_type.unwrap();
+        assert!(resolved.var.name == "path");
+        assert!(resolved.var.type_vec == vec!["const", "struct", "path", "*"]);
+        assert!(var_type.children_vec.len() > 0);
 
         let resolved =
             btf_iterate_over_names_chain(&btf, &base, "args.path->dentry->d_inode").unwrap();
-        assert!(resolved.name == "d_inode");
-        assert!(resolved.children_vec.len() > 0);
+        let var_type = resolved.var_type.unwrap();
+        assert!(resolved.var.name == "d_inode");
+        assert!(var_type.children_vec.len() > 0);
 
         let resolved_fail = btf_iterate_over_names_chain(&btf, &base, "args.path.dentry");
         assert!(resolved_fail.is_none());
 
-        let i_state = resolved
+        let i_state = var_type
             .children_vec
             .iter()
             .find(|&r| r.name == "i_ino")
             .unwrap();
         assert!(i_state.type_vec == vec!("unsigned long"));
 
-        let i_count = resolved
+        let i_count = var_type
             .children_vec
             .iter()
             .find(|&r| r.name == "i_count")
             .unwrap();
         assert!(i_count.type_vec == vec!("atomic_t"));
 
-        let i_uid = resolved
+        let i_uid = var_type
             .children_vec
             .iter()
             .find(|&r| r.name == "i_uid")
@@ -748,8 +791,9 @@ mod tests {
         };
         let base = btf_resolve_func(&btf, "rt2800_link_tuner", true).unwrap();
         let resolved = btf_iterate_over_names_chain(&btf, &base, "qual->").unwrap();
+        let var_type = resolved.var_type.unwrap();
 
-        let vgc_level = resolved
+        let vgc_level = var_type
             .children_vec
             .iter()
             .find(|&r| r.name == "vgc_level")
@@ -763,9 +807,11 @@ mod tests {
         let base = btf_resolve_func(&btf, "posixtimer_send_sigqueue", true).unwrap();
         let resolved = btf_iterate_over_names_chain(&btf, &base, "args.tmr->it").unwrap();
 
-        assert!(resolved.type_vec.iter().any(|s| s == "union"));
+        assert!(resolved.var.type_vec.iter().any(|s| s == "union"));
 
-        let cpu_member = resolved
+        let var_type = resolved.var_type.unwrap();
+
+        let cpu_member = var_type
             .children_vec
             .iter()
             .find(|&r| r.name == "cpu")
@@ -774,7 +820,7 @@ mod tests {
         assert!(cpu_member.type_vec.iter().any(|s| s == "cpu_timer"));
         assert!(cpu_member.type_vec.iter().any(|s| s == "struct"));
 
-        let real_member = resolved
+        let real_member = var_type
             .children_vec
             .iter()
             .find(|&r| r.name == "real")
@@ -797,8 +843,13 @@ mod tests {
 
         // The argument is struct ieee80211_hw *hw
         let hw = btf_iterate_over_names_chain(&btf, &base, "args.hw").unwrap();
+        let hw_type = hw.var_type.unwrap();
 
-        let flags = hw.children_vec.iter().find(|&r| r.name == "flags").unwrap();
+        let flags = hw_type
+            .children_vec
+            .iter()
+            .find(|&r| r.name == "flags")
+            .unwrap();
 
         assert_eq!(flags.type_vec, vec!["unsigned long", "[]"]);
     }
