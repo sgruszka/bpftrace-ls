@@ -7,6 +7,7 @@ use tree_sitter::Node;
 
 use crate::btf_mod::{
     btf_iterate_over_names_chain, btf_resolve_func, btf_setup_module, ResolvedBtfItem,
+    ResolvedVariable,
 };
 use crate::cmd_mod::bpftrace_command;
 use crate::gen::completion::{bpftrace_probe_providers, bpftrace_stdlib_functions};
@@ -44,11 +45,11 @@ fn children_to_vec_str(resolved: &ResolvedBtfItem) -> Vec<String> {
     results
 }
 
-fn argument_next_item(
+fn resolve_args_name_chain(
     module: String,
     resolved_func: ResolvedBtfItem,
     this_argument: &str,
-) -> ResolvedBtfItem {
+) -> Option<ResolvedVariable> {
     // log_dbg!(COMPL, "MODULE {}", module);
     // log_dbg!(COMPL, "RESOLVED FUNC {:?}", resolved_func);
     // log_dbg!(COMPL, "THIS_ARGUMENT {}", this_argument);
@@ -66,15 +67,14 @@ fn argument_next_item(
 
     let module_btf_map = MODULE_BTF_MAP.lock().unwrap();
 
-    if let Some(btf) = module_btf_map.get(&module) {
-        if let Some(resolved) = btf_iterate_over_names_chain(btf, &resolved_func, this_argument) {
-            if let Some(var_type) = resolved.var_type {
-                return var_type;
-            }
-        }
+    if let Some(resolved_var) = module_btf_map
+        .get(&module)
+        .and_then(|btf| btf_iterate_over_names_chain(btf, &resolved_func, this_argument))
+    {
+        return Some(resolved_var);
     }
 
-    ResolvedBtfItem::default()
+    None
 }
 
 fn is_fentry_probe(probe: &str) -> bool {
@@ -244,15 +244,18 @@ fn encode_completion_for_args_keyword(
         // On first line of probe args is kfunc module and name
         probe_args_iter.next();
         items_from_probe_args(probe_args_iter)
-    } else if let Some((module, resolved_btf)) = btf_probe_args {
-        let arg_btf = argument_next_item(module, resolved_btf, args_with_fields);
-
+    } else if let Some(next_items) = btf_probe_args
+        .and_then(|(module, resolved_btf)| {
+            resolve_args_name_chain(module, resolved_btf, args_with_fields)
+        })
+        .and_then(|item| item.var_type)
+    {
         // For debug:
-        // let args = children_to_vec_str(&arg_btf);
+        // let args = children_to_vec_str(&next_items);
         // let args_as_string.push_str(&args.join("\n"));
         // log_dbg!(COMPL, "Found arguments using btf:\n{}", args_as_string);
 
-        items_from_resolved_btf(&arg_btf)
+        items_from_resolved_btf(&next_items)
     } else {
         json::JsonValue::new_array()
     };
@@ -775,20 +778,44 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
             found.push('.');
         }
         let btf_probe_args = find_kfunc_args_by_btf(&probe, true);
-        let Some((module, resolved_btf)) = btf_probe_args else {
+        let Some((module, resolved_func)) = btf_probe_args else {
             return empty_data;
         };
 
         // log_dbg!(HOVER, "Resolved BTF {:?}", resolved_btf);
-        let arg_btf = argument_next_item(module, resolved_btf, &found);
-        // log_dbg!(HOVER, "ARG BTF {:?}", arg_btf);
-        let mut hover = btf_item_to_str(&arg_btf, true);
+        let Some(resolved_variable) = resolve_args_name_chain(module, resolved_func, &found) else {
+            return empty_data;
+        };
 
-        let args = children_to_vec_str(&arg_btf);
+        let mut hover = btf_item_to_str(&resolved_variable.var, true);
+        if let Some(var_type) = resolved_variable.var_type {
+            let s = format!(
+                ":\n```c\n{}\n{{\n",
+                btf_item_to_str(&var_type, true).replace("* ", "")
+            );
+            hover.push_str(&s);
 
-        hover.push_str("\n");
-        hover.push_str("\n");
-        hover.push_str(&args.join("\n"));
+            // Structure/union members
+            let mut max_type_width = 0;
+            for child in var_type.children_vec.iter() {
+                let width = btf_item_to_str(child, false).len();
+                if width > max_type_width {
+                    max_type_width = width;
+                }
+            }
+
+            for child in var_type.children_vec.iter() {
+                let s = format!(
+                    "        {:<width$} {}; \n",
+                    btf_item_to_str(child, false),
+                    &child.name,
+                    width = max_type_width
+                );
+                hover.push_str(&s);
+            }
+
+            hover.push_str("};```");
+        }
 
         log_vdbg!(HOVER, "Hover:\n{:?}", hover);
 
