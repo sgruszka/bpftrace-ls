@@ -36,15 +36,6 @@ fn btf_item_to_str(item: &ResolvedBtfItem, with_name: bool) -> String {
     s
 }
 
-fn children_to_vec_str(resolved: &ResolvedBtfItem) -> Vec<String> {
-    let mut results: Vec<String> = Vec::new();
-    for child in resolved.children_vec.iter() {
-        results.push(btf_item_to_str(child, true));
-    }
-
-    results
-}
-
 fn resolve_args_name_chain(
     module: String,
     resolved_func: ResolvedBtfItem,
