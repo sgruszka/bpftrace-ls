@@ -181,7 +181,7 @@ pub fn find_errors<'t>(text: &str, root_node: &Node<'t>) -> Vec<Node<'t>> {
     results
 }
 
-pub fn find_probe_for_action(action: &Node, text: &str) -> String {
+pub fn find_probes_for_action(action: &Node, text: &str) -> Vec<String> {
     assert_eq!(action.kind(), "action");
 
     // TODO remove unwrap and add checks in case of broken tree
@@ -191,13 +191,16 @@ pub fn find_probe_for_action(action: &Node, text: &str) -> String {
     let probes_list = action_block.child(0).unwrap();
     assert_eq!(probes_list.kind(), "probes_list");
 
-    // TODO handle probe list and wildcard's
-    let probe = probes_list.child(0).unwrap();
+    let mut probes_vec: Vec<String> = Vec::with_capacity(probes_list.child_count());
+    for i in 0..probes_list.child_count() {
+        let probe = probes_list.child(i).unwrap();
 
-    let probe_text = probe.utf8_text(text.as_bytes());
+        let probe_text = probe.utf8_text(text.as_bytes());
 
-    //"".to_string()
-    probe_text.unwrap().to_string()
+        probes_vec.push(probe_text.unwrap().to_string());
+    }
+
+    probes_vec
 }
 
 pub fn find_probe_for_error(error_node: &Node, text: &str) -> String {
@@ -404,8 +407,9 @@ tracepoint:syscalls:sys_enter_openat {
         assert_eq!(loc, SyntaxLocation::Action);
         assert_eq!(action.kind(), "action");
 
-        let probe = find_probe_for_action(&action, text);
-        assert_eq!(probe, "kretfunc:mac80211:ieee80211_deauth");
+        let probes = find_probes_for_action(&action, text);
+        assert_eq!(probes.len(), 1);
+        assert_eq!(probes[0], "kretfunc:mac80211:ieee80211_deauth");
     }
 
     #[test]
@@ -423,7 +427,8 @@ kfunc:vmlinux:posix_timer_fn {
         assert_eq!(loc, SyntaxLocation::Action);
         assert_eq!(action.kind(), "action");
 
-        let probe = find_probe_for_action(&action, text);
-        assert_eq!(probe, "kfunc:vmlinux:posix_timer_fn");
+        let probes = find_probes_for_action(&action, text);
+        assert_eq!(probes.len(), 1);
+        assert_eq!(probes[0], "kfunc:vmlinux:posix_timer_fn");
     }
 }

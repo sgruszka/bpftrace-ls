@@ -631,11 +631,12 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
 
     if loc == SyntaxLocation::Action {
         if let Some(args) = parser::is_argument(line_str, char_nr) {
-            let probe = parser::find_probe_for_action(&node, text);
-            if !probe.is_empty() {
+            // TODO handle probes with wildcard
+            let probes_vec = parser::find_probes_for_action(&node, text);
+            if let Some(probe) = probes_vec.first() {
                 log_dbg!(COMPL, "Found probe {}", probe);
 
-                if let Some(data) = encode_completion_for_args_keyword(&probe, &args) {
+                if let Some(data) = encode_completion_for_args_keyword(probe, &args) {
                     return data;
                 }
             }
@@ -765,10 +766,15 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
             };
         }
     } else if loc == SyntaxLocation::Action {
-        let probe = parser::find_probe_for_action(&node, text);
+        // TODO handle probes with wildcard
+        let probes_vec = parser::find_probes_for_action(&node, text);
         // TODO: non BTF probes i.e. tracepoints
         // let probe_args = find_probe_args_by_command(&probe);
         // log_dbg!(HOVER, "Probe {} with args:\n{}", probe, probe_args);
+
+        let Some(probe) = probes_vec.first() else {
+            return empty_data;
+        };
 
         let lterm = |c: char| -> bool { c.is_whitespace() || c == '{' || c == '(' };
         let rterm =
@@ -779,7 +785,8 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         if found == "args" {
             found.push('.');
         }
-        let btf_probe_args = find_kfunc_args_by_btf(&probe, true);
+
+        let btf_probe_args = find_kfunc_args_by_btf(probe, true);
         let Some((module, resolved_func)) = btf_probe_args else {
             return empty_data;
         };
