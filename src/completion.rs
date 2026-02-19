@@ -745,7 +745,9 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         if node.child_count() < 1 {
             return empty_data;
         }
-        let probe_node = node.child(0).unwrap();
+        let Some(probe_node) = parser::find_probe_in_probes_list(&node, line_nr, char_nr) else {
+            return empty_data;
+        };
 
         let probe = probe_node.utf8_text(text.as_bytes()).unwrap_or_default();
         log_dbg!(HOVER, "Hover for probe {}", probe);

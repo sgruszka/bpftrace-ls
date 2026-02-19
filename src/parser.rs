@@ -222,6 +222,20 @@ pub fn find_probe_for_error(error_node: &Node, text: &str) -> String {
     probe_str
 }
 
+pub fn find_probe_in_probes_list<'t>(
+    probes_list: &Node<'t>,
+    line_nr: usize,
+    char_nr: usize,
+) -> Option<Node<'t>> {
+    assert_eq!(probes_list.kind(), "probes_list");
+
+    let mut cursor = probes_list.walk();
+    let ret = probes_list
+        .children(&mut cursor)
+        .find(|&probe| postition_relative_to_node(&probe, line_nr, char_nr) == Position::Within);
+    ret
+}
+
 pub fn find_location(tree: &Tree, line_nr: usize, char_nr: usize) -> SyntaxLocation {
     let root_node = tree.root_node();
     log_dbg!(PARSE, "Syntax tree\n {}", root_node.to_sexp());
