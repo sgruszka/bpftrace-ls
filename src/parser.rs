@@ -194,6 +194,9 @@ pub fn find_probes_for_action(action: &Node, text: &str) -> Vec<String> {
     let mut probes_vec: Vec<String> = Vec::with_capacity(probes_list.child_count());
     for i in 0..probes_list.child_count() {
         let probe = probes_list.child(i).unwrap();
+        if probe.kind() != "probe" {
+            continue;
+        }
 
         let probe_text = probe.utf8_text(text.as_bytes());
 
