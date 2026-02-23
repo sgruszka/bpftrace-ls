@@ -665,8 +665,7 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     if loc == SyntaxLocation::SourceFile && node.has_error() {
         if let Some(args) = parser::is_argument(line_str, char_nr) {
             if let Some(error_node) = parser::find_error_location(text, &node, line_nr, char_nr) {
-                let probe = parser::find_probe_for_error(&error_node, text);
-                let probes_vec = vec![probe];
+                let probes_vec = parser::find_probes_vec_for_error(&error_node, text);
 
                 if let Some(data) = encode_completion_for_args_keyword(&probes_vec, &args) {
                     return data;

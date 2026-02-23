@@ -181,16 +181,7 @@ pub fn find_errors<'t>(text: &str, root_node: &Node<'t>) -> Vec<Node<'t>> {
     results
 }
 
-pub fn find_probes_for_action(action: &Node, text: &str) -> Vec<String> {
-    assert_eq!(action.kind(), "action");
-
-    // TODO remove unwrap and add checks in case of broken tree
-    let action_block = action.parent().unwrap();
-    assert_eq!(action_block.kind(), "action_block");
-
-    let probes_list = action_block.child(0).unwrap();
-    assert_eq!(probes_list.kind(), "probes_list");
-
+fn probes_list_to_vec(probes_list: &Node, text: &str) -> Vec<String> {
     let mut probes_vec: Vec<String> = Vec::with_capacity(probes_list.child_count());
     for i in 0..probes_list.child_count() {
         let probe = probes_list.child(i).unwrap();
@@ -206,15 +197,28 @@ pub fn find_probes_for_action(action: &Node, text: &str) -> Vec<String> {
     probes_vec
 }
 
-pub fn find_probe_for_error(error_node: &Node, text: &str) -> String {
+pub fn find_probes_for_action(action: &Node, text: &str) -> Vec<String> {
+    assert_eq!(action.kind(), "action");
+
+    // TODO remove unwrap and add checks in case of broken tree
+    let action_block = action.parent().unwrap();
+    assert_eq!(action_block.kind(), "action_block");
+
+    let probes_list = action_block.child(0).unwrap();
+    assert_eq!(probes_list.kind(), "probes_list");
+
+    probes_list_to_vec(&probes_list, text)
+}
+
+pub fn find_probes_vec_for_error(error_node: &Node, text: &str) -> Vec<String> {
     assert_eq!(error_node.kind(), "ERROR");
-    let mut probe_str = "".to_string();
+    let mut probes_vec: Vec<String> = Vec::new();
 
     let mut cursor = error_node.walk();
     for child_node in error_node.children(&mut cursor) {
         let probe;
         if child_node.kind() == "probes_list" {
-            probe = child_node.child(0).unwrap();
+            return probes_list_to_vec(&child_node, text);
         } else if child_node.kind() == "probe" {
             probe = child_node;
         } else {
@@ -222,10 +226,11 @@ pub fn find_probe_for_error(error_node: &Node, text: &str) -> String {
         }
 
         let probe_text = probe.utf8_text(text.as_bytes());
-        probe_str = probe_text.unwrap().to_string();
+        let probe_str = probe_text.unwrap().to_string();
+        probes_vec.push(probe_str);
     }
 
-    probe_str
+    probes_vec
 }
 
 pub fn find_probe_in_probes_list<'t>(
