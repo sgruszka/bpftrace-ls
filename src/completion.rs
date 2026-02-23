@@ -1167,6 +1167,18 @@ mod tests {
     }
 
     #[test]
+    fn test_args_completion_for_two_tcp_probes() {
+        let text = r#" fentry:vmlinux:tcp_ack, fentry:vmlinux:tcp_mt { args. }"#;
+        let json_content = document_content_setup(text, 0, text.len() - 2);
+
+        let result = encode_completion(json_content);
+        assert!(result["result"]["items"].len() == 1);
+
+        let fields = vec!["skb"];
+        check_completion_resutls(result, fields);
+    }
+
+    #[test]
     fn test_modules_completion_for_short_clk() {
         let text = r#"t:clk:"#;
         let json_content = document_content_setup(text, 0, text.len());
