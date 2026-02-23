@@ -1178,6 +1178,26 @@ mod tests {
     }
 
     #[test]
+    fn test_args_completion_for_vfs_probes_when_parse_error() {
+        let text = r#"
+fentry:vmlinux:vfs_read,
+fentry:vmlinux:vfs_readv,
+fentry:vmlinux:vfs_write,
+fentry:vmlinux:vfs_writev,
+{
+  printf("%p\n", args.
+"#;
+        let json_content = document_content_setup(text, 6, 22);
+
+        let result = encode_completion(json_content);
+        println!("{}", result["result"]["items"]);
+        assert!(result["result"]["items"].len() == 2);
+
+        let fields = vec!["file", "pos"];
+        check_completion_resutls(result, fields);
+    }
+
+    #[test]
     fn test_modules_completion_for_short_clk() {
         let text = r#"t:clk:"#;
         let json_content = document_content_setup(text, 0, text.len());
