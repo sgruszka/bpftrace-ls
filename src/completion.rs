@@ -202,10 +202,14 @@ fn items_from_probe_args(probe_args_iter: Lines) -> json::JsonValue {
 
 // Complete args. i.e. kfunc:xe:__fini_dbm { printf("%s\n", str(args.drm->driver->name)) }
 fn encode_completion_for_args_keyword(
-    probe: &str,
+    probes_vec: &[String],
     args_with_fields: &str,
 ) -> Option<json::JsonValue> {
     log_dbg!(COMPL, "Complete for argument: {}", args_with_fields);
+
+    let probe = probes_vec.first()?;
+
+    log_dbg!(COMPL, "Found probe {}", probe);
 
     let mut is_kfunc = false;
     let mut need_retval = false;
@@ -624,12 +628,9 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
         if let Some(args) = parser::is_argument(line_str, char_nr) {
             // TODO handle probes with wildcard
             let probes_vec = parser::find_probes_for_action(&node, text);
-            if let Some(probe) = probes_vec.first() {
-                log_dbg!(COMPL, "Found probe {}", probe);
 
-                if let Some(data) = encode_completion_for_args_keyword(probe, &args) {
-                    return data;
-                }
+            if let Some(data) = encode_completion_for_args_keyword(&probes_vec, &args) {
+                return data;
             }
         } else {
             if let Some(data) = encode_completion_for_action(text, &node, line_str, char_nr) {
@@ -642,12 +643,10 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
         if let Some(args) = parser::is_argument(line_str, char_nr) {
             if let Some(error_node) = parser::find_error_location(text, &node, line_nr, char_nr) {
                 let probe = parser::find_probe_for_error(&error_node, text);
-                if !probe.is_empty() {
-                    log_dbg!(COMPL, "Found probe {}", probe);
+                let probes_vec = vec![probe];
 
-                    if let Some(data) = encode_completion_for_args_keyword(&probe, &args) {
-                        return data;
-                    }
+                if let Some(data) = encode_completion_for_args_keyword(&probes_vec, &args) {
+                    return data;
                 }
             }
         }
@@ -717,6 +716,71 @@ where
     found.to_string()
 }
 
+fn cmp_child(a: &ResolvedBtfItem, b: &ResolvedBtfItem) -> bool {
+    if a.name != b.name {
+        return false;
+    }
+
+    if a.type_vec.len() != b.type_vec.len() {
+        return false;
+    }
+
+    for (type_a, type_b) in a.type_vec.iter().zip(b.type_vec.iter()) {
+        if type_a != type_b {
+            return false;
+        }
+    }
+
+    true
+}
+
+// For multiple probes we can have common arguments that will work, but need having matching
+// type and name.
+// TODO will that work when matching type and name but different arg number, IOW is position also
+// important ?
+pub fn find_kfunc_list_arguments(probes_vec: &[String]) -> Option<(String, ResolvedBtfItem)> {
+    let mut probes_iter = probes_vec.iter();
+    let probe = probes_iter.next()?;
+
+    let btf_probe_args = find_kfunc_args_by_btf(probe, true);
+    let (module, mut resolved_func) = btf_probe_args?;
+
+    let mut args_to_remove: Vec<usize> = Vec::new();
+
+    for (i, child) in resolved_func.children_vec.iter().enumerate() {
+        for probe in probes_vec.iter().skip(1) {
+            let btf_probe_args = find_kfunc_args_by_btf(probe, true);
+            let (_next_module, next_resolved_func) = btf_probe_args?;
+            // TODO: we can support diffrent modules if arguments belong to not-split BTF
+            if _next_module != module {
+                return None;
+            }
+
+            let found = next_resolved_func
+                .children_vec
+                .iter()
+                .any(|next_child| cmp_child(child, next_child));
+
+            if !found {
+                args_to_remove.push(i);
+            }
+        }
+    }
+
+    let mut common_args: Vec<ResolvedBtfItem> = Vec::new();
+    for (i, child) in resolved_func.children_vec.iter().enumerate() {
+        if args_to_remove.contains(&i) {
+            continue;
+        }
+
+        common_args.push(child.clone());
+    }
+
+    resolved_func.children_vec = common_args;
+
+    Some((module, resolved_func))
+}
+
 pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
     log_dbg!(HOVER, "Received hover with data {}", content);
     let (uri, line_nr, char_nr) = unpack_text_document_info(content);
@@ -758,14 +822,10 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         }
     } else if loc == SyntaxLocation::Action {
         // TODO handle probes with wildcard
-        let probes_vec = parser::find_probes_for_action(&node, text);
+
         // TODO: non BTF probes i.e. tracepoints
         // let probe_args = find_probe_args_by_command(&probe);
         // log_dbg!(HOVER, "Probe {} with args:\n{}", probe, probe_args);
-
-        let Some(probe) = probes_vec.first() else {
-            return empty_data;
-        };
 
         let lterm = |c: char| -> bool { c.is_whitespace() || c == '{' || c == '(' };
         let rterm =
@@ -777,7 +837,9 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
             found.push('.');
         }
 
-        let btf_probe_args = find_kfunc_args_by_btf(probe, true);
+        let probes_vec = parser::find_probes_for_action(&node, text);
+
+        let btf_probe_args = find_kfunc_list_arguments(&probes_vec);
         let Some((module, resolved_func)) = btf_probe_args else {
             return empty_data;
         };
