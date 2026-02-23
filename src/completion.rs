@@ -200,16 +200,24 @@ fn items_from_probe_args(probe_args_iter: Lines) -> json::JsonValue {
     items
 }
 
-// Complete args. i.e. kfunc:xe:__fini_dbm { printf("%s\n", str(args.drm->driver->name)) }
-fn encode_completion_for_args_keyword(
-    probes_vec: &[String],
-    args_with_fields: &str,
-) -> Option<json::JsonValue> {
-    log_dbg!(COMPL, "Complete for argument: {}", args_with_fields);
+fn are_all_kfuncs(probes_vec: &[String]) -> (bool, bool) {
+    let mut probes_iter = probes_vec.iter();
+    let Some(probe) = probes_iter.next() else {
+        return (false, false);
+    };
 
-    let probe = probes_vec.first()?;
+    let Some((prefix, _)) = probe.split_once(':') else {
+        return (false, false);
+    };
 
-    log_dbg!(COMPL, "Found probe {}", probe);
+    for next_probe in probes_iter.skip(1) {
+        let Some((next_prefix, _)) = next_probe.split_once(':') else {
+            return (false, false);
+        };
+        if prefix != next_prefix {
+            return (false, false);
+        }
+    }
 
     let mut is_kfunc = false;
     let mut need_retval = false;
@@ -226,10 +234,24 @@ fn encode_completion_for_args_keyword(
         need_retval = true;
     }
 
+    (is_kfunc, need_retval)
+}
+// Complete args. i.e. kfunc:xe:__fini_dbm { printf("%s\n", str(args.drm->driver->name)) }
+fn encode_completion_for_args_keyword(
+    probes_vec: &[String],
+    args_with_fields: &str,
+) -> Option<json::JsonValue> {
+    log_dbg!(COMPL, "Complete for argument: {}", args_with_fields);
+
+    let probe = probes_vec.first()?;
+
+    let (is_kfunc, need_retval) = are_all_kfuncs(probes_vec);
+
     let mut btf_probe_args = None;
     if is_kfunc {
-        let kfunc = kprobe_to_kfunc(probe);
-        btf_probe_args = find_kfunc_args_by_btf(&kfunc, need_retval);
+        // TODO
+        // let kfunc = kprobe_to_kfunc(probe);
+        btf_probe_args = find_kfunc_list_arguments(probes_vec, need_retval);
     }
 
     let items = if args_with_fields.ends_with("args.") && !is_kfunc {
@@ -628,6 +650,7 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
         if let Some(args) = parser::is_argument(line_str, char_nr) {
             // TODO handle probes with wildcard
             let probes_vec = parser::find_probes_for_action(&node, text);
+            log_dbg!(COMPL, "Completion for probes vec {:?}", probes_vec);
 
             if let Some(data) = encode_completion_for_args_keyword(&probes_vec, &args) {
                 return data;
@@ -738,18 +761,21 @@ fn cmp_child(a: &ResolvedBtfItem, b: &ResolvedBtfItem) -> bool {
 // type and name.
 // TODO will that work when matching type and name but different arg number, IOW is position also
 // important ?
-pub fn find_kfunc_list_arguments(probes_vec: &[String]) -> Option<(String, ResolvedBtfItem)> {
+pub fn find_kfunc_list_arguments(
+    probes_vec: &[String],
+    need_retval: bool,
+) -> Option<(String, ResolvedBtfItem)> {
     let mut probes_iter = probes_vec.iter();
     let probe = probes_iter.next()?;
 
-    let btf_probe_args = find_kfunc_args_by_btf(probe, true);
+    let btf_probe_args = find_kfunc_args_by_btf(probe, need_retval);
     let (module, mut resolved_func) = btf_probe_args?;
 
     let mut args_to_remove: Vec<usize> = Vec::new();
 
     for (i, child) in resolved_func.children_vec.iter().enumerate() {
         for probe in probes_vec.iter().skip(1) {
-            let btf_probe_args = find_kfunc_args_by_btf(probe, true);
+            let btf_probe_args = find_kfunc_args_by_btf(probe, need_retval);
             let (_next_module, next_resolved_func) = btf_probe_args?;
             // TODO: we can support diffrent modules if arguments belong to not-split BTF
             if _next_module != module {
@@ -838,8 +864,9 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         }
 
         let probes_vec = parser::find_probes_for_action(&node, text);
+        log_dbg!(HOVER, "Found probes vec {:?}", probes_vec);
 
-        let btf_probe_args = find_kfunc_list_arguments(&probes_vec);
+        let btf_probe_args = find_kfunc_list_arguments(&probes_vec, true);
         let Some((module, resolved_func)) = btf_probe_args else {
             return empty_data;
         };
