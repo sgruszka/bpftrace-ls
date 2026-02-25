@@ -210,6 +210,61 @@ pub fn find_probes_for_action(action: &Node, text: &str) -> Vec<String> {
     probes_list_to_vec(&probes_list, text)
 }
 
+fn add_variables_for_assignment(node: &Node, text: &str, results: &mut Vec<String>) {
+    assert!(node.kind() == "assignment_statement" || node.kind() == "declaration_statement");
+    if let Some(var) = node.child(0).and_then(|var| {
+        if var.kind() == "scratch_variable"
+        /*|| var.kind() == "map_variable" */
+        {
+            Some(var)
+        } else {
+            None
+        }
+    }) {
+        if let Ok(variable_name) = var.utf8_text(text.as_bytes()) {
+            results.push(variable_name.to_owned());
+        }
+    }
+}
+
+fn node_with_block<'t>(node: &Node<'t>) -> Option<Node<'t>> {
+    let mut cursor = node.walk();
+    let block = node
+        .children(&mut cursor)
+        .find(|&child| child.kind() == "block");
+    block
+}
+
+fn add_variables_for_block(
+    main_node: &Node,
+    text: &str,
+    line_nr: usize,
+    char_nr: usize,
+    results: &mut Vec<String>,
+) {
+    assert!(main_node.kind() == "block" || main_node.kind() == "action");
+
+    let mut cursor = main_node.walk();
+    for node in main_node.children(&mut cursor) {
+        let pos = postition_relative_to_node(&node, line_nr, char_nr);
+        if pos == Position::Before {
+            break;
+        }
+
+        if let Some(block) = node_with_block(&node) {
+            if postition_relative_to_node(&block, line_nr, char_nr) == Position::Within {
+                add_variables_for_block(&block, text, line_nr, char_nr, results);
+            }
+        }
+
+        if node.kind() != "assignment_statement" && node.kind() != "declaration_statement" {
+            continue;
+        }
+
+        add_variables_for_assignment(&node, text, results);
+    }
+}
+
 pub fn find_variables_for_action(
     action: &Node,
     text: &str,
@@ -220,29 +275,7 @@ pub fn find_variables_for_action(
 
     let mut results = Vec::new();
 
-    let mut cursor = action.walk();
-    for node in action.children(&mut cursor) {
-        let pos = postition_relative_to_node(&node, line_nr, char_nr);
-        if pos == Position::Before {
-            continue;
-        }
-
-        if node.kind() == "assignment_statement" || node.kind() == "declaration_statement" {
-            if let Some(var) = node.child(0).and_then(|var| {
-                if var.kind() == "scratch_variable"
-                /*|| var.kind() == "map_variable" */
-                {
-                    Some(var)
-                } else {
-                    None
-                }
-            }) {
-                if let Ok(variable_name) = var.utf8_text(text.as_bytes()) {
-                    results.push(variable_name.to_owned());
-                }
-            }
-        }
-    }
+    add_variables_for_block(action, text, line_nr, char_nr, &mut results);
 
     results
 }
@@ -494,5 +527,33 @@ begin {
         assert_eq!(variables.len(), 2);
         assert_eq!(variables[0], "$x");
         assert_eq!(variables[1], "$y");
+    }
+
+    #[test]
+    fn test_find_scoped_variables_for_action() {
+        let text = r#"
+begin {
+  $x = 10; $y = 20;
+  while ($x > 0) {
+    $z = 8;
+    $x--;
+  }
+  while ($y > 0) {
+    $u = 8;
+    $y--
+
+  }
+}
+    "#;
+        let tree = setup_syntax_tree(text);
+
+        let (loc, action) = find_syntax_location(text, &tree, 3, 4);
+        assert_eq!(loc, SyntaxLocation::Action);
+        assert_eq!(action.kind(), "action");
+        let variables = find_variables_for_action(&action, text, 10, 0);
+        assert_eq!(variables.len(), 3);
+        assert_eq!(variables[0], "$x");
+        assert_eq!(variables[1], "$y");
+        assert_eq!(variables[2], "$u");
     }
 }
