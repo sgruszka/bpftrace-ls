@@ -1,6 +1,6 @@
-# bpftrace-ls
+# bpftrace-language-server
 
-[LSP](https://microsoft.github.io/language-server-protocol/) Languge Server for [bpftrace](https://github.com/bpftrace/bpftrace)
+[bpftrace](https://github.com/bpftrace/bpftrace) code completion, diagnostics and more, using [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
 
 ## Configuration
 
@@ -68,7 +68,7 @@ See [documentation]( https://neovim.io/doc/user/lsp.html) for details.
 -- LSP config for bpftrace-ls
 vim.lsp.config['bpftrace-ls'] = {
   -- Command and arguments to start the server.
-  cmd = { '/PATH/TO/bpftrace-ls/target/debug/bpftrace-ls' },
+  cmd = { '/PATH/TO/bpftrace-language-server/target/debug/bpftrace-ls' },
   filetypes = { 'bpftrace' },
 }
 -- Enable the server
