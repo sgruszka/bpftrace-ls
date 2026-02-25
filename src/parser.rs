@@ -210,6 +210,42 @@ pub fn find_probes_for_action(action: &Node, text: &str) -> Vec<String> {
     probes_list_to_vec(&probes_list, text)
 }
 
+pub fn find_variables_for_action(
+    action: &Node,
+    text: &str,
+    line_nr: usize,
+    char_nr: usize,
+) -> Vec<String> {
+    assert_eq!(action.kind(), "action");
+
+    let mut results = Vec::new();
+
+    let mut cursor = action.walk();
+    for node in action.children(&mut cursor) {
+        let pos = postition_relative_to_node(&node, line_nr, char_nr);
+        if pos == Position::Before {
+            continue;
+        }
+
+        if node.kind() == "assignment_statement" || node.kind() == "declaration_statement" {
+            if let Some(var) = node.child(0).and_then(|var| {
+                if var.kind() == "scratch_variable"
+                /*|| var.kind() == "map_variable" */
+                {
+                    Some(var)
+                } else {
+                    None
+                }
+            }) {
+                if let Ok(variable_name) = var.utf8_text(text.as_bytes()) {
+                    results.push(variable_name.to_owned());
+                }
+            }
+        }
+    }
+
+    results
+}
 pub fn find_probes_vec_for_error(error_node: &Node, text: &str) -> Vec<String> {
     assert_eq!(error_node.kind(), "ERROR");
     let mut probes_vec: Vec<String> = Vec::new();
@@ -438,5 +474,25 @@ kfunc:vmlinux:posix_timer_fn {
         let probes = find_probes_for_action(&action, text);
         assert_eq!(probes.len(), 1);
         assert_eq!(probes[0], "kfunc:vmlinux:posix_timer_fn");
+    }
+
+    #[test]
+    fn test_find_one_variable_for_action() {
+        let text = r#"
+begin {
+  $x = 10; $y = 1;
+  $z =
+}
+        "#;
+        let tree = setup_syntax_tree(text);
+
+        let (loc, action) = find_syntax_location(text, &tree, 3, 4);
+        assert_eq!(loc, SyntaxLocation::Action);
+        assert_eq!(action.kind(), "action");
+
+        let variables = find_variables_for_action(&action, text, 3, 4);
+        assert_eq!(variables.len(), 2);
+        assert_eq!(variables[0], "$x");
+        assert_eq!(variables[1], "$y");
     }
 }
