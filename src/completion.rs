@@ -17,6 +17,42 @@ use crate::DOCUMENTS_STATE;
 use crate::{log_dbg, log_err, log_vdbg};
 use btf_rs::Btf;
 
+#[allow(unused)]
+#[derive(PartialEq, Clone, Copy)]
+enum CompletionItemKind {
+    Text = 1,
+    Method = 2,
+    Function = 3,
+    Constructor = 4,
+    Field = 5,
+    Variable = 6,
+    Class = 7,
+    Interface = 8,
+    Module = 9,
+    Property = 10,
+    Unit = 11,
+    Value = 12,
+    Enum = 13,
+    Keyword = 14,
+    Snippet = 15,
+    Color = 16,
+    File = 17,
+    Reference = 18,
+    Folder = 19,
+    EnumMember = 20,
+    Constant = 21,
+    Struct = 22,
+    Event = 23,
+    Operator = 24,
+    TypeParameter = 25,
+}
+
+impl From<CompletionItemKind> for json::JsonValue {
+    fn from(kind: CompletionItemKind) -> json::JsonValue {
+        json::JsonValue::from(kind as u8)
+    }
+}
+
 static PROBES_ARGS_MAP: LazyLock<Mutex<HashMap<String, String>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -288,6 +324,23 @@ fn encode_completion_for_args_keyword(
     Some(data)
 }
 
+pub fn add_action_block_keywords(items: &mut json::JsonValue) {
+    let keywords = [
+        "break", "continue", "else", "for", "if", "let", "offsetof", "return", "sizeof", "unroll",
+        "while",
+    ];
+
+    for kw in keywords {
+        let item = object! {
+            "label": kw.to_owned(),
+            "kind": CompletionItemKind::Keyword,
+            // "detail": "TODO",
+            // "documentation": "need better documentation",
+        };
+
+        let _ = items.push(item);
+    }
+}
 fn encode_completion_for_action(
     _text: &str,
     _node: &Node,
@@ -300,7 +353,9 @@ fn encode_completion_for_action(
     let mut items = json::JsonValue::new_array();
 
     bpftrace_stdlib_functions(&mut items);
+    add_action_block_keywords(&mut items);
 
+    // Special args. buildin
     let completion_args = object! {
         "label": "args",
         "kind" : 5,
@@ -460,9 +515,9 @@ fn encode_completion_for_line(
                 };
 
                 let kind = if match_tokens == trace_tokens.len() - 1 {
-                    10 // Property
+                    CompletionItemKind::Property
                 } else {
-                    9 // Module
+                    CompletionItemKind::Module
                 };
 
                 let mut item = object! {
@@ -472,7 +527,9 @@ fn encode_completion_for_line(
                     // "documentation": "need better documentation",
                 };
 
-                if (trace_tokens[0] == "kfunc" || trace_tokens[0] == "fentry") && kind == 10 {
+                if (trace_tokens[0] == "kfunc" || trace_tokens[0] == "fentry")
+                    && kind == CompletionItemKind::Property
+                {
                     if let Some((_module, resolved_btf)) = find_kfunc_args_by_btf(trace_line, true)
                     {
                         item["detail"] = func_proto_str(&resolved_btf).into();
@@ -506,10 +563,27 @@ fn encode_completion_for_line(
     Some(data)
 }
 
+pub fn add_empty_line_keywords(items: &mut json::JsonValue) {
+    // TODO "config" is only allowed in preamble
+    let keywords = ["config", "import", "macro", "let"];
+
+    for kw in keywords {
+        let item = object! {
+            "label": kw.to_owned(),
+            "kind": CompletionItemKind::Keyword,
+            // "detail": "TODO",
+            // "documentation": "need better documentation",
+        };
+
+        let _ = items.push(item);
+    }
+}
+
 fn encode_completion_for_empty_line() -> json::JsonValue {
     let mut items = json::JsonValue::new_array();
 
     bpftrace_probe_providers(&mut items);
+    add_empty_line_keywords(&mut items);
 
     let data = object! {
         "result": {
