@@ -280,6 +280,36 @@ pub fn find_variables_for_action(
     results
 }
 
+pub fn find_source_file_macros_for_action<'t>(action: &'t Node, text: &str) -> Vec<String> {
+    assert_eq!(action.kind(), "action");
+
+    let mut macros = Vec::new();
+
+    let Some(action_block) = action.parent() else {
+        return macros;
+    };
+    assert_eq!(action_block.kind(), "action_block");
+
+    let Some(source_file) = action_block.parent() else {
+        return macros;
+    };
+    assert_eq!(source_file.kind(), "source_file");
+
+    let mut cursor = source_file.walk();
+    for node in source_file.named_children(&mut cursor) {
+        if node.kind() == "macro_definition" {
+            let Some(name_node) = node.child_by_field_name("name") else {
+                continue;
+            };
+            if let Ok(macro_name) = name_node.utf8_text(text.as_bytes()) {
+                macros.push(macro_name.to_owned());
+            }
+        }
+    }
+
+    macros
+}
+
 pub fn find_probes_vec_for_error(error_node: &Node, text: &str) -> Vec<String> {
     assert_eq!(error_node.kind(), "ERROR");
     let mut probes_vec: Vec<String> = Vec::new();
@@ -578,5 +608,33 @@ begin {
         println!("{variables:?}");
         assert_eq!(variables.len(), 1);
         assert_eq!(variables[0], "$i");
+    }
+
+    #[test]
+    fn test_find_file_macros() {
+        let text = r#"
+macro add_one(x) {
+  x + 1
+}
+
+begin {
+  $x = ;
+}
+
+macro add_two(y) {
+  y + 2
+}
+
+    "#;
+        let tree = setup_syntax_tree(text);
+
+        let (loc, action) = find_syntax_location(text, &tree, 6, 7);
+        assert_eq!(loc, SyntaxLocation::Action);
+        assert_eq!(action.kind(), "action");
+
+        let macros = find_source_file_macros_for_action(&action, text);
+        assert_eq!(macros.len(), 2);
+        assert_eq!(macros[0], "add_one");
+        assert_eq!(macros[1], "add_two");
     }
 }
