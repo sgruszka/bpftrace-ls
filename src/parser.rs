@@ -210,9 +210,8 @@ pub fn find_probes_for_action(action: &Node, text: &str) -> Vec<String> {
     probes_list_to_vec(&probes_list, text)
 }
 
-fn add_variables_for_assignment(node: &Node, text: &str, results: &mut Vec<String>) {
-    assert!(node.kind() == "assignment_statement" || node.kind() == "declaration_statement");
-    if let Some(var) = node.child(0).and_then(|var| {
+fn add_variables_for_node(node: &Node, text: &str, results: &mut Vec<String>, child_nr: usize) {
+    if let Some(var) = node.child(child_nr).and_then(|var| {
         if var.kind() == "scratch_variable"
         /*|| var.kind() == "map_variable" */
         {
@@ -257,11 +256,14 @@ fn add_variables_for_block(
             }
         }
 
-        if node.kind() != "assignment_statement" && node.kind() != "declaration_statement" {
-            continue;
-        }
+        let child_idx = match node.kind() {
+            "assignment_statement" => 0,
+            "declaration_statement" => 0,
+            "for_statement" => 1,
+            _ => continue,
+        };
 
-        add_variables_for_assignment(&node, text, results);
+        add_variables_for_node(&node, text, results, child_idx);
     }
 }
 
@@ -279,6 +281,7 @@ pub fn find_variables_for_action(
 
     results
 }
+
 pub fn find_probes_vec_for_error(error_node: &Node, text: &str) -> Vec<String> {
     assert_eq!(error_node.kind(), "ERROR");
     let mut probes_vec: Vec<String> = Vec::new();
@@ -547,13 +550,35 @@ begin {
     "#;
         let tree = setup_syntax_tree(text);
 
-        let (loc, action) = find_syntax_location(text, &tree, 3, 4);
+        let (loc, action) = find_syntax_location(text, &tree, 10, 0);
         assert_eq!(loc, SyntaxLocation::Action);
         assert_eq!(action.kind(), "action");
+
         let variables = find_variables_for_action(&action, text, 10, 0);
         assert_eq!(variables.len(), 3);
         assert_eq!(variables[0], "$x");
         assert_eq!(variables[1], "$y");
         assert_eq!(variables[2], "$u");
+    }
+
+    #[test]
+    fn test_find_range_variable() {
+        let text = r#"
+begin {
+  for $i : 0..10 {
+    $y =  
+  }
+}
+    "#;
+        let tree = setup_syntax_tree(text);
+
+        let (loc, action) = find_syntax_location(text, &tree, 3, 10);
+        assert_eq!(loc, SyntaxLocation::Action);
+        assert_eq!(action.kind(), "action");
+
+        let variables = find_variables_for_action(&action, text, 3, 10);
+        println!("{variables:?}");
+        assert_eq!(variables.len(), 1);
+        assert_eq!(variables[0], "$i");
     }
 }
