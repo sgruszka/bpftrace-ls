@@ -341,11 +341,34 @@ pub fn add_action_block_keywords(items: &mut json::JsonValue) {
         let _ = items.push(item);
     }
 }
+
+fn add_action_block_variables(
+    node: &Node,
+    text: &str,
+    line_nr: usize,
+    char_nr: usize,
+    items: &mut json::JsonValue,
+) {
+    let variables = parser::find_variables_for_action(node, text, line_nr, char_nr);
+    log_dbg!(COMPL, "Comletion: found variables {variables:?}");
+
+    for var in variables {
+        let item = object! {
+            "label": var.to_owned(),
+            "kind": CompletionItemKind::Variable,
+            // "detail": "TODO",
+            // "documentation": "need better documentation",
+        };
+
+        let _ = items.push(item);
+    }
+}
+
 fn encode_completion_for_action(
-    _text: &str,
-    _node: &Node,
-    _line_str: &str,
-    _char_nr: usize,
+    text: &str,
+    node: &Node,
+    line_nr: usize,
+    char_nr: usize,
 ) -> Option<json::JsonValue> {
     log_dbg!(COMPL, "Complete for action block");
 
@@ -354,6 +377,7 @@ fn encode_completion_for_action(
 
     bpftrace_stdlib_functions(&mut items);
     add_action_block_keywords(&mut items);
+    add_action_block_variables(node, text, line_nr, char_nr, &mut items);
 
     // Special args. buildin
     let completion_args = object! {
@@ -730,7 +754,7 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
                 return data;
             }
         } else {
-            if let Some(data) = encode_completion_for_action(text, &node, line_str, char_nr) {
+            if let Some(data) = encode_completion_for_action(text, &node, line_nr, char_nr) {
                 return data;
             }
         }
