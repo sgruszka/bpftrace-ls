@@ -364,6 +364,22 @@ fn add_action_block_variables(
     }
 }
 
+fn add_source_file_macros(node: &Node, text: &str, items: &mut json::JsonValue) {
+    let macros = parser::find_source_file_macros_for_action(node, text);
+    log_dbg!(COMPL, "Comletion: found macros {macros:?}");
+
+    // TODO add parameters
+    for mac in macros {
+        let item = object! {
+            "label": mac.to_owned(),
+            "kind": CompletionItemKind::Function,
+            // "detail": "TODO",
+            // "documentation": "need better documentation",
+        };
+
+        let _ = items.push(item);
+    }
+}
 fn encode_completion_for_action(
     text: &str,
     node: &Node,
@@ -378,6 +394,7 @@ fn encode_completion_for_action(
     bpftrace_stdlib_functions(&mut items);
     add_action_block_keywords(&mut items);
     add_action_block_variables(node, text, line_nr, char_nr, &mut items);
+    add_source_file_macros(node, text, &mut items);
 
     // Special args. buildin
     let completion_args = object! {
