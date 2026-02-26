@@ -212,9 +212,7 @@ pub fn find_probes_for_action(action: &Node, text: &str) -> Vec<String> {
 
 fn add_variables_for_node(node: &Node, text: &str, results: &mut Vec<String>, child_nr: usize) {
     if let Some(var) = node.child(child_nr).and_then(|var| {
-        if var.kind() == "scratch_variable"
-        /*|| var.kind() == "map_variable" */
-        {
+        if var.kind() == "scratch_variable" || var.kind() == "map_variable" {
             Some(var)
         } else {
             None
