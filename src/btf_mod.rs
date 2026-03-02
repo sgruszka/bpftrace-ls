@@ -496,6 +496,29 @@ pub struct ResolvedVariable {
     pub var_type: Option<ResolvedBtfItem>,
 }
 
+fn resolve_struct_or_union(
+    btf: &Btf,
+    resolved_param: ResolvedBtfItem,
+    type_id: u32,
+) -> ResolvedVariable {
+    if let Some(resolved_struct) = resolve_struct(btf, type_id) {
+        ResolvedVariable {
+            var: resolved_param,
+            var_type: Some(resolved_struct),
+        }
+    } else if let Some(resolved_union) = resolve_union(btf, type_id) {
+        ResolvedVariable {
+            var: resolved_param,
+            var_type: Some(resolved_union),
+        }
+    } else {
+        ResolvedVariable {
+            var: resolved_param,
+            var_type: None,
+        }
+    }
+}
+
 pub fn btf_iterate_over_names_chain(
     btf: &Btf,
     func: &ResolvedBtfItem,
@@ -526,23 +549,8 @@ pub fn btf_iterate_over_names_chain(
 
         if names_iter.peek().is_none() {
             let resolved_param = resolve_parameter(btf, first_param)?;
-
-            if let Some(resolved_struct) = resolve_struct(btf, resolved_param.type_id) {
-                return Some(ResolvedVariable {
-                    var: resolved_param,
-                    var_type: Some(resolved_struct),
-                });
-            } else if let Some(resolved_union) = resolve_union(btf, resolved_param.type_id) {
-                return Some(ResolvedVariable {
-                    var: resolved_param,
-                    var_type: Some(resolved_union),
-                });
-            } else {
-                return Some(ResolvedVariable {
-                    var: resolved_param,
-                    var_type: None,
-                });
-            }
+            let type_id = resolved_param.type_id;
+            return Some(resolve_struct_or_union(btf, resolved_param, type_id));
         }
 
         // Handle struct/union members: use -> for pointrs and . for direct access
@@ -629,22 +637,7 @@ pub fn btf_iterate_over_names_chain(
         };
         resolve_type_id(btf, type_id, &mut var_item);
 
-        if let Some(resolved_struct) = resolve_struct(btf, type_id) {
-            Some(ResolvedVariable {
-                var: var_item,
-                var_type: Some(resolved_struct),
-            })
-        } else if let Some(resolved_union) = resolve_union(btf, type_id) {
-            Some(ResolvedVariable {
-                var: var_item,
-                var_type: Some(resolved_union),
-            })
-        } else {
-            Some(ResolvedVariable {
-                var: var_item,
-                var_type: None,
-            })
-        }
+        Some(resolve_struct_or_union(btf, var_item, type_id))
     } else {
         // TODO remove duplication
 
