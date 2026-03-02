@@ -491,6 +491,7 @@ fn chain_str_to_tokens(names_chain: &str) -> Vec<&str> {
     res
 }
 
+#[derive(Debug)]
 pub struct ResolvedVariable {
     pub var: ResolvedBtfItem,
     pub var_type: Option<ResolvedBtfItem>,
@@ -526,10 +527,22 @@ pub fn btf_iterate_over_names_chain(
 ) -> Option<ResolvedVariable> {
     let mut names_chain_vec = chain_str_to_tokens(names_chain_str);
 
-    if names_chain_vec.len() >= 2 && names_chain_vec[0] == "args" && names_chain_vec[1] == "." {
-        // Remove "args."
-        names_chain_vec.remove(0);
-        names_chain_vec.remove(0);
+    let mut is_retval = false;
+    let mut is_args = false;
+    if names_chain_vec.len() >= 2 {
+        if names_chain_vec[0] == "retval" || names_chain_vec[0] == "retval()" {
+            is_retval = true;
+        }
+
+        if names_chain_vec[0] == "args" {
+            is_args = true;
+        }
+
+        // Remove "args." or "retval."
+        if (is_retval || is_args) && names_chain_vec[1] == "." {
+            names_chain_vec.remove(0);
+            names_chain_vec.remove(0);
+        }
     }
 
     let func_proto = match btf.resolve_type_by_id(func.type_id).ok() {
@@ -638,6 +651,17 @@ pub fn btf_iterate_over_names_chain(
         resolve_type_id(btf, type_id, &mut var_item);
 
         Some(resolve_struct_or_union(btf, var_item, type_id))
+    } else if is_retval {
+        if let Some(retval) = func
+            .children_vec
+            .iter()
+            .find(|child| child.name == "retval")
+        {
+            let type_id = retval.type_id;
+            Some(resolve_struct_or_union(btf, retval.clone(), type_id))
+        } else {
+            None
+        }
     } else {
         // TODO remove duplication
 
@@ -820,6 +844,29 @@ mod tests {
             .unwrap();
 
         assert!(real_member.type_vec.iter().any(|s| s == "struct"));
+    }
+
+    #[test]
+    fn test_resolve_tcp_check_req_retval() {
+        let btf = btf_setup_module("vmlinux").unwrap();
+        let base = btf_resolve_func(&btf, "tcp_check_req", true).unwrap();
+
+        let resolved = btf_iterate_over_names_chain(&btf, &base, "retval.").unwrap();
+
+        assert!(resolved.var.type_vec.iter().any(|s| s == "struct"));
+        assert!(resolved.var.type_vec.iter().any(|s| s == "sock"));
+
+        let var_type = resolved.var_type.unwrap();
+
+        assert!(var_type
+            .children_vec
+            .iter()
+            .any(|child| child.name == "sk_receive_queue"));
+
+        assert!(var_type
+            .children_vec
+            .iter()
+            .any(|child| child.name == "sk_timer"));
     }
 
     #[test]
