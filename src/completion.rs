@@ -1261,14 +1261,26 @@ mod tests {
     }
 
     #[test]
-    fn test_args_completion_find_ge_pid_retval() {
-        let text = r#"fexit:vmlinux:find_ge_pid { retval. }"#;
+    fn test_args_completion_posix_acl_alloc_retval() {
+        let text = r#"fexit:vmlinux:posix_acl_alloc { retval. }"#;
         let json_content = document_content_setup(text, 0, text.len() - 2);
 
         let result = encode_completion(json_content);
         assert!(result["result"]["items"].len() > 0);
 
-        let fields = vec!["stashed", "ino", "tasks"];
+        let fields = vec!["a_entries"];
+        check_completion_resutls(result, fields);
+    }
+
+    #[test]
+    fn test_args_completion_find_ge_pid_retval() {
+        let text = r#"fexit:vmlinux:find_ge_pid { retval.stached->d_parent }"#;
+        let json_content = document_content_setup(text, 0, text.len() - 2);
+
+        let result = encode_completion(json_content);
+        assert!(result["result"]["items"].len() > 0);
+
+        let fields = vec!["d_op", "d_u", "d_sb"];
         check_completion_resutls(result, fields);
     }
 
