@@ -528,46 +528,54 @@ pub fn btf_iterate_over_names_chain(
     let mut names_chain_vec = chain_str_to_tokens(names_chain_str);
 
     let mut is_retval = false;
-    let mut is_args = false;
     if names_chain_vec.len() >= 2 {
-        if names_chain_vec[0] == "retval" || names_chain_vec[0] == "retval()" {
+        if names_chain_vec[0] == "retval()" || names_chain_vec[0] == "retval" {
             is_retval = true;
+            names_chain_vec[0] = "retval";
         }
 
-        if names_chain_vec[0] == "args" {
-            is_args = true;
-        }
-
-        // Remove "args." or "retval."
-        if (is_retval || is_args) && names_chain_vec[1] == "." {
+        if names_chain_vec[0] == "args" && names_chain_vec[1] == "." {
             names_chain_vec.remove(0);
             names_chain_vec.remove(0);
         }
     }
 
-    let func_proto = match btf.resolve_type_by_id(func.type_id).ok() {
-        Some(Type::FuncProto(proto)) => proto,
-        x => {
-            log_dbg!(BTFRE, "Resolved type is not a function proto, is {:?}", x);
-            return None;
-        }
-    };
-
     let mut names_iter = names_chain_vec.iter().peekable();
     if let Some(first_name) = names_iter.next() {
-        let first_param = func_proto
-            .parameters
-            .iter()
-            .find(|&p| btf.resolve_name(p).unwrap_or_default().eq(first_name))?;
+        println!("First name {first_name}");
+        let mut type_id;
 
-        if names_iter.peek().is_none() {
-            let resolved_param = resolve_parameter(btf, first_param)?;
-            let type_id = resolved_param.type_id;
-            return Some(resolve_struct_or_union(btf, resolved_param, type_id));
+        if first_name.starts_with("retval") {
+            let retval = func
+                .children_vec
+                .iter()
+                .find(|child| child.name == "retval")?;
+
+            type_id = retval.type_id;
+        } else {
+            let func_proto = match btf.resolve_type_by_id(func.type_id).ok() {
+                Some(Type::FuncProto(proto)) => proto,
+                x => {
+                    log_dbg!(BTFRE, "Resolved type is not a function proto, is {:?}", x);
+                    return None;
+                }
+            };
+
+            let first_param = func_proto
+                .parameters
+                .iter()
+                .find(|&p| btf.resolve_name(p).unwrap_or_default().eq(first_name))?;
+
+            if names_iter.peek().is_none() {
+                let resolved_param = resolve_parameter(btf, first_param)?;
+                let type_id = resolved_param.type_id;
+                return Some(resolve_struct_or_union(btf, resolved_param, type_id));
+            }
+
+            type_id = first_param.get_type_id().unwrap_or_default();
         }
 
         // Handle struct/union members: use -> for pointrs and . for direct access
-        let mut type_id = first_param.get_type_id().unwrap_or_default();
         let mut last_name = *first_name;
         let mut names_iter_peek = names_iter.peekable();
         while let Some(op) = names_iter_peek.next() {
