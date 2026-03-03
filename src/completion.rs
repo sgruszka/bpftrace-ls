@@ -199,6 +199,9 @@ fn items_from_resolved_btf(btf_item: &ResolvedBtfItem) -> json::JsonValue {
     let mut items = json::JsonValue::new_array();
 
     for child in btf_item.children_vec.iter() {
+        if child.name == "retval" {
+            continue;
+        }
         let completion = object! {
             "label": child.name.clone(),
             "kind" : 5,
@@ -273,7 +276,7 @@ fn are_all_kfuncs(probes_vec: &[String]) -> (bool, bool) {
     (is_kfunc, need_retval)
 }
 // Complete args. i.e. kfunc:xe:__fini_dbm { printf("%s\n", str(args.drm->driver->name)) }
-fn encode_completion_for_args_keyword(
+fn encode_completion_for_args_or_retval(
     probes_vec: &[String],
     args_with_fields: &str,
 ) -> Option<json::JsonValue> {
@@ -304,10 +307,7 @@ fn encode_completion_for_args_keyword(
         .and_then(|item| item.var_type)
     {
         // For debug:
-        // let args = children_to_vec_str(&next_items);
-        // let args_as_string.push_str(&args.join("\n"));
-        // log_dbg!(COMPL, "Found arguments using btf:\n{}", args_as_string);
-
+        // log_dbg!(COMPL, "Found arguments using btf:\n{:?}", next_items);
         items_from_resolved_btf(&next_items)
     } else {
         json::JsonValue::new_array()
@@ -762,12 +762,12 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
         get_document_state!(text_doc, line_nr, char_nr, encode_no_completion(), COMPL);
 
     if loc == SyntaxLocation::Action {
-        if let Some(args) = parser::is_argument(line_str, char_nr) {
+        if let Some(args) = parser::is_args_or_retval(line_str, char_nr) {
             // TODO handle probes with wildcard
             let probes_vec = parser::find_probes_for_action(&node, text);
             log_dbg!(COMPL, "Completion for probes vec {:?}", probes_vec);
 
-            if let Some(data) = encode_completion_for_args_keyword(&probes_vec, &args) {
+            if let Some(data) = encode_completion_for_args_or_retval(&probes_vec, &args) {
                 return data;
             }
         } else {
@@ -778,11 +778,11 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     }
 
     if loc == SyntaxLocation::SourceFile && node.has_error() {
-        if let Some(args) = parser::is_argument(line_str, char_nr) {
+        if let Some(args) = parser::is_args_or_retval(line_str, char_nr) {
             if let Some(error_node) = parser::find_error_location(text, &node, line_nr, char_nr) {
                 let probes_vec = parser::find_probes_vec_for_error(&error_node, text);
 
-                if let Some(data) = encode_completion_for_args_keyword(&probes_vec, &args) {
+                if let Some(data) = encode_completion_for_args_or_retval(&probes_vec, &args) {
                     return data;
                 }
             }
@@ -1256,7 +1256,19 @@ mod tests {
         let result = encode_completion(json_content);
         assert!(result["result"]["items"].len() > 0);
 
-        let fields = vec!["retval", "tp", "clock"];
+        let fields = vec!["tp", "clock"];
+        check_completion_resutls(result, fields);
+    }
+
+    #[test]
+    fn test_args_completion_find_ge_pid_retval() {
+        let text = r#"fexit:vmlinux:find_ge_pid { retval. }"#;
+        let json_content = document_content_setup(text, 0, text.len() - 2);
+
+        let result = encode_completion(json_content);
+        assert!(result["result"]["items"].len() > 0);
+
+        let fields = vec!["stashed", "ino", "tasks"];
         check_completion_resutls(result, fields);
     }
 

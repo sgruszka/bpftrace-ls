@@ -385,16 +385,29 @@ pub fn find_location(tree: &Tree, line_nr: usize, char_nr: usize) -> SyntaxLocat
     SyntaxLocation::SourceFile
 }
 
-pub fn is_argument(line_str: &str, char_nr: usize) -> Option<String> {
-    if let Some(last_word) = line_str
-        .get(0..=char_nr)
-        .and_then(|line_upto_char| line_upto_char.rsplit([' ', '[', '{', '(', ',']).next())
-    {
-        if last_word.starts_with("args.") {
-            return Some(last_word.to_string());
-        }
+pub fn is_args_or_retval(line_str: &str, char_nr: usize) -> Option<String> {
+    let line_upto_char = line_str.get(0..=char_nr)?;
+
+    let mut words = line_upto_char.rsplit([' ', '[', '{', '(', ',']);
+    let last_word = words.next()?;
+
+    if last_word.starts_with("args.") {
+        return Some(last_word.to_string());
     }
 
+    // Handle retval.FIELDS and retval().FIELDS
+    if last_word.starts_with("retval.") {
+        return Some(last_word.to_string());
+    } else if last_word.starts_with(").") {
+        if let Some(word) = words.next() {
+            if word.starts_with("retval") {
+                let mut ret = "retval(".to_string();
+                ret.push_str(last_word);
+
+                return Some(ret);
+            }
+        }
+    }
     None
 }
 
