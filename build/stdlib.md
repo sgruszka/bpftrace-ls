@@ -981,17 +981,6 @@ This utilizes the BPF helper `get_prandom_u32`
 Get the contents of the register identified by `name`.
 Valid names depend on the CPU architecture.
 
-
-### retval
-- `uint64 retval()`
-- `uint64 retval`
-
-Value returned by the function being traced
-
-(kretprobe, uretprobe, fexit)
-For kretprobe and uretprobe, its type is uint64, but for fexit it depends. You can look up the type using `bpftrace -lv`
-
-
 ### signal
 - `void signal(const string sig)`
 - `void signal(uint32 signum)`

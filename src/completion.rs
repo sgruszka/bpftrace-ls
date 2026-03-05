@@ -259,7 +259,7 @@ fn are_all_kfuncs(probes_vec: &[String]) -> (bool, bool) {
     }
 
     let mut is_kfunc = false;
-    let mut need_retval = false;
+    let mut has_retval = false;
 
     if probe.starts_with("kprobe:") || probe.starts_with("fentry") || probe.starts_with("kfunc:") {
         is_kfunc = true;
@@ -270,27 +270,28 @@ fn are_all_kfuncs(probes_vec: &[String]) -> (bool, bool) {
         || probe.starts_with("fexit")
     {
         is_kfunc = true;
-        need_retval = true;
+        has_retval = true;
     }
 
-    (is_kfunc, need_retval)
+    (is_kfunc, has_retval)
 }
+
 // Complete args. i.e. kfunc:xe:__fini_dbm { printf("%s\n", str(args.drm->driver->name)) }
 fn encode_completion_for_args_or_retval(
     probes_vec: &[String],
     args_with_fields: &str,
+    is_kfunc: bool,
+    has_retval: bool,
 ) -> Option<json::JsonValue> {
     log_dbg!(COMPL, "Complete for argument: {}", args_with_fields);
 
     let probe = probes_vec.first()?;
 
-    let (is_kfunc, need_retval) = are_all_kfuncs(probes_vec);
-
     let mut btf_probe_args = None;
     if is_kfunc {
         // TODO
         // let kfunc = kprobe_to_kfunc(probe);
-        btf_probe_args = find_kfunc_list_arguments(probes_vec, need_retval);
+        btf_probe_args = find_kfunc_list_arguments(probes_vec, has_retval);
     }
 
     let items = if args_with_fields.ends_with("args.") && !is_kfunc {
@@ -380,11 +381,14 @@ fn add_source_file_macros(node: &Node, text: &str, items: &mut json::JsonValue) 
         let _ = items.push(item);
     }
 }
+
 fn encode_completion_for_action(
     text: &str,
     node: &Node,
     line_nr: usize,
     char_nr: usize,
+    _is_kfunc: bool, // TODO chenge to has_args, for probes when args. are valid
+    has_retval: bool,
 ) -> Option<json::JsonValue> {
     log_dbg!(COMPL, "Complete for action block");
 
@@ -396,10 +400,33 @@ fn encode_completion_for_action(
     add_action_block_variables(node, text, line_nr, char_nr, &mut items);
     add_source_file_macros(node, text, &mut items);
 
+    // TODO provide types in 'detail'
+    if has_retval {
+        let retval_item = object! {
+            "label": r#"retval"#,
+            "kind" : CompletionItemKind::Keyword,
+            "detail": r#"uint64 retval()
+uint64 retval
+"#,
+            "documentation" : {
+                "kind": "markdown",
+                "value": r#"
+
+Value returned by the function being traced
+
+(kretprobe, uretprobe, fexit)
+For kretprobe and uretprobe, its type is uint64, but for fexit it depends. You can look up the type using `bpftrace -lv`
+
+"#,
+            },
+        };
+        let _ = items.push(retval_item);
+    }
+
     // Special args. buildin
     let completion_args = object! {
         "label": "args",
-        "kind" : 5,
+        "kind" : CompletionItemKind::Keyword,
         "detail" : "args",
         "documentation" : r#"
 This keyword represents the struct of all arguments of the traced function.
@@ -762,16 +789,22 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
         get_document_state!(text_doc, line_nr, char_nr, encode_no_completion(), COMPL);
 
     if loc == SyntaxLocation::Action {
+        let probes_vec = parser::find_probes_for_action(&node, text);
+        log_dbg!(COMPL, "Completion for probes vec {:?}", probes_vec);
+        let (is_kfunc, has_retval) = are_all_kfuncs(&probes_vec);
+
         if let Some(args) = parser::is_args_or_retval(line_str, char_nr) {
             // TODO handle probes with wildcard
-            let probes_vec = parser::find_probes_for_action(&node, text);
-            log_dbg!(COMPL, "Completion for probes vec {:?}", probes_vec);
 
-            if let Some(data) = encode_completion_for_args_or_retval(&probes_vec, &args) {
+            if let Some(data) =
+                encode_completion_for_args_or_retval(&probes_vec, &args, is_kfunc, has_retval)
+            {
                 return data;
             }
         } else {
-            if let Some(data) = encode_completion_for_action(text, &node, line_nr, char_nr) {
+            if let Some(data) =
+                encode_completion_for_action(text, &node, line_nr, char_nr, is_kfunc, has_retval)
+            {
                 return data;
             }
         }
@@ -781,8 +814,11 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
         if let Some(args) = parser::is_args_or_retval(line_str, char_nr) {
             if let Some(error_node) = parser::find_error_location(text, &node, line_nr, char_nr) {
                 let probes_vec = parser::find_probes_vec_for_error(&error_node, text);
+                let (is_kfunc, has_retval) = are_all_kfuncs(&probes_vec);
 
-                if let Some(data) = encode_completion_for_args_or_retval(&probes_vec, &args) {
+                if let Some(data) =
+                    encode_completion_for_args_or_retval(&probes_vec, &args, is_kfunc, has_retval)
+                {
                     return data;
                 }
             }
