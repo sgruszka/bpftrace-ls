@@ -66,7 +66,9 @@ static FENTRY_KFUNC_NAME: OnceLock<&'static str> = OnceLock::new();
 fn btf_item_to_str(item: &ResolvedBtfItem, with_name: bool) -> String {
     let mut s = item.type_vec.join(" ").to_string();
     if with_name {
-        s.push_str(" ");
+        if !s.is_empty() {
+            s.push_str(" ");
+        }
         s.push_str(&item.name);
     }
     s
@@ -998,6 +1000,7 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         }
     } else if loc == SyntaxLocation::Action {
         // TODO handle probes with wildcard
+        // TODO better printing for function args and retval
 
         // TODO: non BTF probes i.e. tracepoints
         // let probe_args = find_probe_args_by_command(&probe);
@@ -1009,6 +1012,11 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         let mut found = find_hover_str(line_str, char_nr, lterm, rterm);
         log_dbg!(HOVER, "Hover found args string {}", found);
 
+        // TODO: make retval. work properly in btf_iterate_over_names_chain()
+        if found == "retval" || found == "retval()" {
+            found.push('.');
+        }
+
         if found == "args" {
             found.push('.');
         }
@@ -1016,15 +1024,17 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         let probes_vec = parser::find_probes_for_action(&node, text);
         log_dbg!(HOVER, "Found probes vec {:?}", probes_vec);
 
-        let btf_probe_args = find_kfunc_list_arguments(&probes_vec, true);
+        let (_is_kfunc, has_retval) = are_all_kfuncs(&probes_vec);
+
+        let btf_probe_args = find_kfunc_list_arguments(&probes_vec, has_retval);
         let Some((module, resolved_func)) = btf_probe_args else {
             return empty_data;
         };
 
-        // log_dbg!(HOVER, "Resolved BTF {:?}", resolved_btf);
         let Some(resolved_variable) = resolve_args_name_chain(module, resolved_func, &found) else {
             return empty_data;
         };
+        // log_dbg!(HOVER, "\nResolved variable {:?}\n", resolved_variable);
 
         let mut hover = btf_item_to_str(&resolved_variable.var, true);
         if let Some(var_type) = resolved_variable.var_type {
@@ -1037,6 +1047,9 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
             // Structure/union members
             let mut max_type_width = 0;
             for child in var_type.children_vec.iter() {
+                if child.name == "retval" {
+                    continue;
+                }
                 let width = btf_item_to_str(child, false).len();
                 if width > max_type_width {
                     max_type_width = width;
@@ -1044,6 +1057,9 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
             }
 
             for child in var_type.children_vec.iter() {
+                if child.name == "retval" {
+                    continue;
+                }
                 let s = format!(
                     "        {:<width$} {}; \n",
                     btf_item_to_str(child, false),
