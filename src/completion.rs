@@ -280,20 +280,13 @@ fn are_all_kfuncs(probes_vec: &[String]) -> (bool, bool) {
 
 // Complete args. i.e. kfunc:xe:__fini_dbm { printf("%s\n", str(args.drm->driver->name)) }
 fn encode_completion_for_args_or_retval(
-    probes_compl: &ProbesCompletion,
+    probes_compl: ProbesCompletion,
     args_with_fields: &str,
 ) -> Option<json::JsonValue> {
     log_dbg!(COMPL, "Complete for argument: {}", args_with_fields);
 
     let probes_vec = &probes_compl.probes_vec;
     let probe = probes_vec.first()?;
-
-    let mut btf_probe_args = None;
-    if probes_compl.is_kfunc {
-        // TODO
-        // let kfunc = kprobe_to_kfunc(probe);
-        btf_probe_args = find_kfunc_list_arguments(probes_vec, probes_compl.has_retval);
-    }
 
     let items = if args_with_fields.ends_with("args.") && !probes_compl.is_kfunc {
         let probe_args = find_probe_args_by_command(probe);
@@ -302,7 +295,8 @@ fn encode_completion_for_args_or_retval(
         // On first line of probe args is kfunc module and name
         probe_args_iter.next();
         items_from_probe_args(probe_args_iter)
-    } else if let Some(next_items) = btf_probe_args
+    } else if let Some(next_items) = probes_compl
+        .btf_probe_args
         .and_then(|(module, resolved_btf)| {
             resolve_args_name_chain(module, resolved_btf, args_with_fields)
         })
@@ -388,7 +382,7 @@ fn encode_completion_for_action(
     node: &Node,
     line_nr: usize,
     char_nr: usize,
-    probes_compl: &ProbesCompletion,
+    probes_compl: ProbesCompletion,
 ) -> Option<json::JsonValue> {
     log_dbg!(COMPL, "Complete for action block");
 
@@ -789,9 +783,15 @@ struct ProbesCompletion {
 impl ProbesCompletion {
     fn new(probes_vec: Vec<String>) -> ProbesCompletion {
         let (is_kfunc, has_retval) = are_all_kfuncs(&probes_vec);
+        let mut btf_probe_args = None;
+        if is_kfunc {
+            // TODO
+            // let kfunc = kprobe_to_kfunc(probe);
+            btf_probe_args = find_kfunc_list_arguments(&probes_vec, has_retval);
+        }
         ProbesCompletion {
             probes_vec,
-            btf_probe_args: None,
+            btf_probe_args,
             is_kfunc,
             has_retval,
         }
@@ -817,12 +817,12 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
         if let Some(args) = parser::is_args_or_retval(line_str, char_nr) {
             // TODO handle probes with wildcard
 
-            if let Some(data) = encode_completion_for_args_or_retval(&probes_compl, &args) {
+            if let Some(data) = encode_completion_for_args_or_retval(probes_compl, &args) {
                 return data;
             }
         } else {
             if let Some(data) =
-                encode_completion_for_action(text, &node, line_nr, char_nr, &probes_compl)
+                encode_completion_for_action(text, &node, line_nr, char_nr, probes_compl)
             {
                 return data;
             }
@@ -840,7 +840,7 @@ pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
                 );
                 let probes_compl = ProbesCompletion::new(probes_vec);
 
-                if let Some(data) = encode_completion_for_args_or_retval(&probes_compl, &args) {
+                if let Some(data) = encode_completion_for_args_or_retval(probes_compl, &args) {
                     return data;
                 }
             }
