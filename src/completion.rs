@@ -733,10 +733,7 @@ fn unpack_text_document_info(content: json::JsonValue) -> (String, usize, usize)
     let position = &content["params"]["position"];
 
     let line_nr = position["line"].as_usize().unwrap_or_default();
-    let char_nr = position["character"]
-        .as_usize()
-        .unwrap_or_default()
-        .saturating_sub(1);
+    let char_nr = position["character"].as_usize().unwrap_or_default();
 
     (uri, line_nr, char_nr)
 }
@@ -801,6 +798,8 @@ impl ProbesCompletion {
 #[allow(clippy::collapsible_else_if)]
 pub fn encode_completion(content: json::JsonValue) -> json::JsonValue {
     let (uri, line_nr, char_nr) = unpack_text_document_info(content);
+    // For completion look at place before the cursor.
+    let char_nr = char_nr.saturating_sub(1);
 
     let Some(text_doc) = DOCUMENTS_STATE.get(&uri) else {
         return encode_no_completion();
@@ -1045,19 +1044,40 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         let Some((module, resolved_func)) = btf_probe_args else {
             return empty_data;
         };
+        let func_name = resolved_func.name.clone();
 
         let Some(resolved_variable) = resolve_args_name_chain(module, resolved_func, &found) else {
             return empty_data;
         };
-        // log_dbg!(HOVER, "\nResolved variable {:?}\n", resolved_variable);
 
-        let mut hover = btf_item_to_str(&resolved_variable.var, true);
+        log_dbg!(HOVER, "\nResolved variable\n{:?}\n", resolved_variable);
+        log_dbg!(HOVER, "\nFound\n{}\n", found);
+
+        let mut hover = String::new();
+        let hover_name = btf_item_to_str(&resolved_variable.var, true);
+
+        let mut is_args = false;
+        if found == "args." {
+            hover.push_str(&format!("Arguments of {}:\n", func_name));
+            is_args = true;
+        } else if found == "retval" {
+            hover.push_str(&format!("Return value of {}:\n", func_name));
+            hover.push_str(&format!("```c\n{};```\n", hover_name));
+        } else {
+            hover = hover_name;
+            hover.push_str(":\n");
+        }
+
         if let Some(var_type) = resolved_variable.var_type {
-            let s = format!(
-                ":\n```c\n{}\n{{\n",
-                btf_item_to_str(&var_type, true).replace("* ", "")
-            );
-            hover.push_str(&s);
+            let s = if is_args {
+                "```c\nstruct args\n{\n"
+            } else {
+                &format!(
+                    "```c\n{}\n{{\n",
+                    btf_item_to_str(&var_type, true).replace("* ", "")
+                )
+            };
+            hover.push_str(s);
 
             // Structure/union members
             let mut max_type_width = 0;

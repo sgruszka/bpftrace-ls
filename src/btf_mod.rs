@@ -349,6 +349,7 @@ fn resolve_func_parameters(
 
     if ret_type_id > 0 && need_retval {
         let mut ret_item = ResolvedBtfItem {
+            // TODO need to fix if C struct has actual fiend named retval
             name: "retval".to_string(),
             type_vec: Vec::new(),
             type_id: 0,
