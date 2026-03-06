@@ -622,7 +622,6 @@ begin {
         assert_eq!(action.kind(), "action");
 
         let variables = find_variables_for_action(&action, text, 3, 10);
-        println!("{variables:?}");
         assert_eq!(variables.len(), 1);
         assert_eq!(variables[0], "$i");
     }

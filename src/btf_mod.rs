@@ -542,7 +542,6 @@ pub fn btf_iterate_over_names_chain(
 
     let mut names_iter = names_chain_vec.iter().peekable();
     if let Some(first_name) = names_iter.next() {
-        println!("First name {first_name}");
         let mut type_id;
 
         if first_name.starts_with("retval") {
