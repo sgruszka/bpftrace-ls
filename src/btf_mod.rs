@@ -852,7 +852,7 @@ mod tests {
         let btf = btf_setup_module("vmlinux").unwrap();
         let base = btf_resolve_func(&btf, "tcp_check_req", true).unwrap();
 
-        let resolved = btf_iterate_over_names_chain(&btf, &base, "retval.").unwrap();
+        let resolved = btf_iterate_over_names_chain(&btf, &base, "retval").unwrap();
 
         assert!(resolved.var.type_vec.iter().any(|s| s == "struct"));
         assert!(resolved.var.type_vec.iter().any(|s| s == "sock"));

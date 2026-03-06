@@ -1349,7 +1349,7 @@ mod tests {
 
     #[test]
     fn test_args_completion_posix_acl_alloc_retval() {
-        let text = r#"fexit:vmlinux:posix_acl_alloc { retval. }"#;
+        let text = r#"fexit:vmlinux:posix_acl_alloc { retval-> }"#;
         let json_content = document_content_setup(text, 0, text.len() - 2);
 
         let result = encode_completion(json_content);
@@ -1361,7 +1361,7 @@ mod tests {
 
     #[test]
     fn test_args_completion_find_ge_pid_retval() {
-        let text = r#"fexit:vmlinux:find_ge_pid { retval.stashed->d_parent }"#;
+        let text = r#"fexit:vmlinux:find_ge_pid { retval->stashed->d_parent }"#;
         let json_content = document_content_setup(text, 0, text.len() - 2);
 
         let result = encode_completion(json_content);
