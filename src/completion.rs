@@ -1032,11 +1032,6 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         let mut found = find_hover_str(line_str, char_nr, lterm, rterm);
         log_dbg!(HOVER, "Hover found args string {}", found);
 
-        // TODO: make retval. work properly in btf_iterate_over_names_chain()
-        if found == "retval" || found == "retval()" {
-            found.push('.');
-        }
-
         if found == "args" {
             found.push('.');
         }

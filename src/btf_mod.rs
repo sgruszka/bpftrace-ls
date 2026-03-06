@@ -542,24 +542,17 @@ pub fn btf_iterate_over_names_chain(
 
     let mut names_iter = names_chain_vec.iter().peekable();
     if let Some(first_name) = names_iter.next() {
-        let mut type_id;
+        let func_proto = match btf.resolve_type_by_id(func.type_id).ok() {
+            Some(Type::FuncProto(proto)) => proto,
+            x => {
+                log_dbg!(BTFRE, "Resolved type is not a function proto, is {:?}", x);
+                return None;
+            }
+        };
 
-        if first_name.starts_with("retval") {
-            let retval = func
-                .children_vec
-                .iter()
-                .find(|child| child.name == "retval")?;
-
-            type_id = retval.type_id;
+        let mut type_id = if first_name.starts_with("retval") {
+            func_proto.return_type_id()
         } else {
-            let func_proto = match btf.resolve_type_by_id(func.type_id).ok() {
-                Some(Type::FuncProto(proto)) => proto,
-                x => {
-                    log_dbg!(BTFRE, "Resolved type is not a function proto, is {:?}", x);
-                    return None;
-                }
-            };
-
             let first_param = func_proto
                 .parameters
                 .iter()
@@ -571,8 +564,8 @@ pub fn btf_iterate_over_names_chain(
                 return Some(resolve_struct_or_union(btf, resolved_param, type_id));
             }
 
-            type_id = first_param.get_type_id().unwrap_or_default();
-        }
+            first_param.get_type_id().unwrap_or_default()
+        };
 
         // Handle struct/union members: use -> for pointrs and . for direct access
         let mut last_name = *first_name;

@@ -399,10 +399,12 @@ pub fn is_args_or_retval(line_str: &str, char_nr: usize) -> Option<String> {
         return Some(last_word.to_string());
     }
 
-    // Handle retval.FIELDS and retval().FIELDS
-    if last_word.starts_with("retval.") {
+    // Handle:
+    // retval.FIELDS and retval().FIELDS
+    // retval->FIELDS and retval()->FIELDS
+    if last_word.starts_with("retval.") || last_word.starts_with("retval->") {
         return Some(last_word.to_string());
-    } else if last_word.starts_with(").") {
+    } else if last_word.starts_with(").") || last_word.starts_with(")->") {
         if let Some(word) = words.next() {
             if word.starts_with("retval") {
                 let mut ret = "retval(".to_string();
