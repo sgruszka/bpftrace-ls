@@ -377,38 +377,48 @@ fn add_source_file_macros(node: &Node, text: &str, items: &mut json::JsonValue) 
     }
 }
 
-fn add_retval(_node: &Node, _text: &str, items: &mut json::JsonValue) {
+fn add_retval(probes_compl: &ProbesCompletion, items: &mut json::JsonValue) {
+    let Some((details, docs)) = get_details_and_docs(probes_compl, "retval") else {
+        return;
+    };
+
     let retval_item = object! {
         "label": r#"retval"#,
         "kind" : CompletionItemKind::Keyword,
-        "detail": r#"uint64 retval()
-uint64 retval
-"#,
+        "detail": details,
         "documentation" : {
             "kind": "markdown",
-            "value": r#"
-
-Value returned by the function being traced
-
-(kretprobe, uretprobe, fexit)
-For kretprobe and uretprobe, its type is uint64, but for fexit it depends. You can look up the type using `bpftrace -lv`
-
-"#,
+            "value": docs,
         },
     };
     let _ = items.push(retval_item);
 }
 
-fn add_args(_node: &Node, _text: &str, items: &mut json::JsonValue) {
+fn add_args(probes_compl: &ProbesCompletion, items: &mut json::JsonValue) {
+    let Some((details, docs)) = get_details_and_docs(probes_compl, "args.") else {
+        return;
+    };
+
     let completion_args = object! {
         "label": "args",
         "kind" : CompletionItemKind::Keyword,
-        "detail" : "args",
-        "documentation" : r#"
-This keyword represents the struct of all arguments of the traced function.
-You can print the entire structure via `print(args)` or access particular fields using the dot syntax, e.g., `$x = str(args.filename);`. "#,
+        "detail" : details,
+        "documentation" : {
+            "kind": "markdown",
+            "value": docs,
+        },
     };
     let _ = items.push(completion_args);
+}
+
+// Special args and retval builtin
+fn add_args_and_retval_keywords(probes_compl: &ProbesCompletion, items: &mut json::JsonValue) {
+    if probes_compl.has_retval {
+        add_retval(probes_compl, items);
+    }
+    if probes_compl.is_kfunc {
+        add_args(probes_compl, items);
+    }
 }
 
 fn encode_completion_for_action(
@@ -428,12 +438,8 @@ fn encode_completion_for_action(
     add_action_block_variables(node, text, line_nr, char_nr, &mut items);
     add_source_file_macros(node, text, &mut items);
 
-    // Special args and retval builtin
-    if probes_compl.has_retval {
-        add_retval(node, text, &mut items);
-    }
-    if probes_compl.is_kfunc {
-        add_args(node, text, &mut items);
+    if !probes_compl.probes_vec.is_empty() {
+        add_args_and_retval_keywords(&probes_compl, &mut items);
     }
 
     let is_incomplete = false; // Currently we provide complete list
@@ -985,6 +991,8 @@ pub fn find_kfunc_list_arguments(
     Some((module, resolved_func))
 }
 
+//TODO: Markdown and not markdown version, it's displayed differently for hover and completion
+//
 // For args and retval
 fn get_details_and_docs(
     probes_compl: &ProbesCompletion,
@@ -1007,7 +1015,7 @@ fn get_details_and_docs(
         is_args = true;
     } else if keyword_with_fields == "retval" {
         details.push_str(&format!("Return value of {}():\n", func_name));
-        docs.push_str(&format!("```c\n{};```\n", hover_name));
+        docs.push_str(&format!("```c\n{}; ```\n", hover_name));
     } else {
         details = hover_name;
         details.push_str(":\n");
