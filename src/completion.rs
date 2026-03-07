@@ -378,7 +378,7 @@ fn add_source_file_macros(node: &Node, text: &str, items: &mut json::JsonValue) 
 }
 
 fn add_retval(probes_compl: &ProbesCompletion, items: &mut json::JsonValue) {
-    let Some((details, docs)) = get_details_and_docs(probes_compl, "retval") else {
+    let Some((details, docs)) = get_details_and_docs(probes_compl, "retval", false) else {
         return;
     };
 
@@ -395,7 +395,7 @@ fn add_retval(probes_compl: &ProbesCompletion, items: &mut json::JsonValue) {
 }
 
 fn add_args(probes_compl: &ProbesCompletion, items: &mut json::JsonValue) {
-    let Some((details, docs)) = get_details_and_docs(probes_compl, "args.") else {
+    let Some((details, docs)) = get_details_and_docs(probes_compl, "args.", false) else {
         return;
     };
 
@@ -991,12 +991,11 @@ pub fn find_kfunc_list_arguments(
     Some((module, resolved_func))
 }
 
-//TODO: Markdown and not markdown version, it's displayed differently for hover and completion
-//
 // For args and retval
 fn get_details_and_docs(
     probes_compl: &ProbesCompletion,
     keyword_with_fields: &str,
+    hover: bool,
 ) -> Option<(String, String)> {
     let (module, resolved_func) = probes_compl.btf_probe_args.as_ref()?;
 
@@ -1009,13 +1008,23 @@ fn get_details_and_docs(
 
     let hover_name = btf_item_to_str(&resolved_variable.var, true);
 
+    let c_open;
+    let c_close;
+    if hover {
+        c_open = "```c\n";
+        c_close = "```";
+    } else {
+        c_open = "```c\n";
+        c_close = "\n```\n";
+    }
+
     let mut is_args = false;
     if keyword_with_fields == "args." {
         details.push_str(&format!("Arguments of {}():\n", func_name));
         is_args = true;
     } else if keyword_with_fields == "retval" {
         details.push_str(&format!("Return value of {}():\n", func_name));
-        docs.push_str(&format!("```c\n{}; ```\n", hover_name));
+        docs.push_str(&format!("{}{};{}\n", c_open, hover_name, c_close));
     } else {
         details = hover_name;
         details.push_str(":\n");
@@ -1023,10 +1032,11 @@ fn get_details_and_docs(
 
     if let Some(var_type) = resolved_variable.var_type {
         let s = if is_args {
-            "```c\nstruct args\n{\n"
+            &format!("{}struct args\n{{\n", c_open)
         } else {
             &format!(
-                "```c\n{}\n{{\n",
+                "{}{}\n{{\n",
+                c_open,
                 btf_item_to_str(&var_type, true).replace("* ", "")
             )
         };
@@ -1057,7 +1067,7 @@ fn get_details_and_docs(
             docs.push_str(&s);
         }
 
-        docs.push_str("};```");
+        docs.push_str(&format!("}};{}", c_close));
     }
 
     Some((details, docs))
@@ -1136,7 +1146,7 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
             has_retval,
         };
 
-        let Some((details, docs)) = get_details_and_docs(&probes_compl, &found) else {
+        let Some((details, docs)) = get_details_and_docs(&probes_compl, &found, true) else {
             return empty_data;
         };
 
