@@ -977,6 +977,76 @@ pub fn find_kfunc_list_arguments(
 
     Some((module, resolved_func))
 }
+fn get_details_and_docs(probes_vec: &[String], fields: &str) -> Option<(String, String)> {
+    let found = fields;
+
+    let (_is_kfunc, has_retval) = are_all_kfuncs(probes_vec);
+
+    let btf_probe_args = find_kfunc_list_arguments(probes_vec, has_retval);
+    let (module, resolved_func) = btf_probe_args?;
+    let func_name = resolved_func.name.clone();
+
+    let resolved_variable = resolve_args_name_chain(module, resolved_func, found)?;
+
+    let mut details = String::new();
+    let mut docs = String::new();
+
+    let hover_name = btf_item_to_str(&resolved_variable.var, true);
+
+    let mut is_args = false;
+    if found == "args." {
+        details.push_str(&format!("Arguments of {}():\n", func_name));
+
+        is_args = true;
+    } else if found == "retval" {
+        details.push_str(&format!("Return value of {}():\n", func_name));
+        docs.push_str(&format!("```c\n{};```\n", hover_name));
+    } else {
+        details = hover_name;
+        details.push_str(":\n");
+    }
+
+    if let Some(var_type) = resolved_variable.var_type {
+        let s = if is_args {
+            "```c\nstruct args\n{\n"
+        } else {
+            &format!(
+                "```c\n{}\n{{\n",
+                btf_item_to_str(&var_type, true).replace("* ", "")
+            )
+        };
+        docs.push_str(s);
+
+        // Structure/union members
+        let mut max_type_width = 0;
+        for child in var_type.children_vec.iter() {
+            if child.name == "retval" {
+                continue;
+            }
+            let width = btf_item_to_str(child, false).len();
+            if width > max_type_width {
+                max_type_width = width;
+            }
+        }
+
+        for child in var_type.children_vec.iter() {
+            if child.name == "retval" {
+                continue;
+            }
+            let s = format!(
+                "        {:<width$} {}; \n",
+                btf_item_to_str(child, false),
+                &child.name,
+                width = max_type_width
+            );
+            docs.push_str(&s);
+        }
+
+        docs.push_str("};```");
+    }
+
+    Some((details, docs))
+}
 
 pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
     log_dbg!(HOVER, "Received hover with data {}", content);
@@ -1038,75 +1108,11 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         let probes_vec = parser::find_probes_for_action(&node, text);
         log_dbg!(HOVER, "Found probes vec {:?}", probes_vec);
 
-        let (_is_kfunc, has_retval) = are_all_kfuncs(&probes_vec);
-
-        let btf_probe_args = find_kfunc_list_arguments(&probes_vec, has_retval);
-        let Some((module, resolved_func)) = btf_probe_args else {
-            return empty_data;
-        };
-        let func_name = resolved_func.name.clone();
-
-        let Some(resolved_variable) = resolve_args_name_chain(module, resolved_func, &found) else {
+        let Some((details, docs)) = get_details_and_docs(&probes_vec, &found) else {
             return empty_data;
         };
 
-        log_dbg!(HOVER, "\nResolved variable\n{:?}\n", resolved_variable);
-        log_dbg!(HOVER, "\nFound\n{}\n", found);
-
-        let mut hover = String::new();
-        let hover_name = btf_item_to_str(&resolved_variable.var, true);
-
-        let mut is_args = false;
-        if found == "args." {
-            hover.push_str(&format!("Arguments of {}:\n", func_name));
-            is_args = true;
-        } else if found == "retval" {
-            hover.push_str(&format!("Return value of {}:\n", func_name));
-            hover.push_str(&format!("```c\n{};```\n", hover_name));
-        } else {
-            hover = hover_name;
-            hover.push_str(":\n");
-        }
-
-        if let Some(var_type) = resolved_variable.var_type {
-            let s = if is_args {
-                "```c\nstruct args\n{\n"
-            } else {
-                &format!(
-                    "```c\n{}\n{{\n",
-                    btf_item_to_str(&var_type, true).replace("* ", "")
-                )
-            };
-            hover.push_str(s);
-
-            // Structure/union members
-            let mut max_type_width = 0;
-            for child in var_type.children_vec.iter() {
-                if child.name == "retval" {
-                    continue;
-                }
-                let width = btf_item_to_str(child, false).len();
-                if width > max_type_width {
-                    max_type_width = width;
-                }
-            }
-
-            for child in var_type.children_vec.iter() {
-                if child.name == "retval" {
-                    continue;
-                }
-                let s = format!(
-                    "        {:<width$} {}; \n",
-                    btf_item_to_str(child, false),
-                    &child.name,
-                    width = max_type_width
-                );
-                hover.push_str(&s);
-            }
-
-            hover.push_str("};```");
-        }
-
+        let hover = details + &docs;
         log_vdbg!(HOVER, "Hover:\n{:?}", hover);
 
         data = object! {
