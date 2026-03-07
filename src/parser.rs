@@ -210,9 +210,14 @@ pub fn find_probes_for_action(action: &Node, text: &str) -> Vec<String> {
     probes_list_to_vec(&probes_list, text)
 }
 
-fn add_variables_for_node(node: &Node, text: &str, results: &mut Vec<String>, child_nr: usize) {
+fn add_scratch_variables_for_node(
+    node: &Node,
+    text: &str,
+    results: &mut Vec<String>,
+    child_nr: usize,
+) {
     if let Some(var) = node.child(child_nr).and_then(|var| {
-        if var.kind() == "scratch_variable" || var.kind() == "map_variable" {
+        if var.kind() == "scratch_variable" {
             Some(var)
         } else {
             None
@@ -220,6 +225,36 @@ fn add_variables_for_node(node: &Node, text: &str, results: &mut Vec<String>, ch
     }) {
         if let Ok(variable_name) = var.utf8_text(text.as_bytes()) {
             results.push(variable_name.to_owned());
+        }
+    }
+}
+
+fn add_map_variables_for_node(node: &Node, text: &str, results: &mut Vec<String>, child_nr: usize) {
+    if let Some(var) = node.child(child_nr).and_then(|var| {
+        if var.kind() == "map_variable" {
+            Some(var)
+        } else {
+            None
+        }
+    }) {
+        let Ok(map_with_indexes) = var.utf8_text(text.as_bytes()) else {
+            return;
+        };
+
+        let mut map_var = map_with_indexes.to_owned();
+
+        // TODO: this will not work for nested map i.e. @a[@b[1,2], 3] - to fix use nodes positions
+        // Remove indexes
+        if let Some((before, rest)) = map_with_indexes.split_once('[') {
+            if let Some((inside, after)) = rest.split_once(']') {
+                let comma_count = inside.matches(',').count();
+                let replacement = ",".repeat(comma_count);
+                map_var = format!("{}[{}]{}", before, replacement, after);
+            }
+        }
+
+        if !results.contains(&map_var) {
+            results.push(map_var);
         }
     }
 }
@@ -261,7 +296,8 @@ fn add_variables_for_block(
             _ => continue,
         };
 
-        add_variables_for_node(&node, text, results, child_idx);
+        add_scratch_variables_for_node(&node, text, results, child_idx);
+        add_map_variables_for_node(&node, text, results, child_idx);
     }
 }
 
