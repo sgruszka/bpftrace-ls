@@ -377,6 +377,40 @@ fn add_source_file_macros(node: &Node, text: &str, items: &mut json::JsonValue) 
     }
 }
 
+fn add_retval(_node: &Node, _text: &str, items: &mut json::JsonValue) {
+    let retval_item = object! {
+        "label": r#"retval"#,
+        "kind" : CompletionItemKind::Keyword,
+        "detail": r#"uint64 retval()
+uint64 retval
+"#,
+        "documentation" : {
+            "kind": "markdown",
+            "value": r#"
+
+Value returned by the function being traced
+
+(kretprobe, uretprobe, fexit)
+For kretprobe and uretprobe, its type is uint64, but for fexit it depends. You can look up the type using `bpftrace -lv`
+
+"#,
+        },
+    };
+    let _ = items.push(retval_item);
+}
+
+fn add_args(_node: &Node, _text: &str, items: &mut json::JsonValue) {
+    let completion_args = object! {
+        "label": "args",
+        "kind" : CompletionItemKind::Keyword,
+        "detail" : "args",
+        "documentation" : r#"
+This keyword represents the struct of all arguments of the traced function.
+You can print the entire structure via `print(args)` or access particular fields using the dot syntax, e.g., `$x = str(args.filename);`. "#,
+    };
+    let _ = items.push(completion_args);
+}
+
 fn encode_completion_for_action(
     text: &str,
     node: &Node,
@@ -389,46 +423,21 @@ fn encode_completion_for_action(
     // TODO preload btf module
     let mut items = json::JsonValue::new_array();
 
-    let _is_kfunc: bool = probes_compl.is_kfunc; // TODO chenge to has_args, for probes when args. are valid
+    let is_kfunc: bool = probes_compl.is_kfunc; // TODO change to has_args, for probes when args. are valid
 
     bpftrace_stdlib_functions(&mut items);
     add_action_block_keywords(&mut items);
     add_action_block_variables(node, text, line_nr, char_nr, &mut items);
     add_source_file_macros(node, text, &mut items);
 
-    // TODO provide types in 'detail'
+    // Special args and retval builtin
     if probes_compl.has_retval {
-        let retval_item = object! {
-            "label": r#"retval"#,
-            "kind" : CompletionItemKind::Keyword,
-            "detail": r#"uint64 retval()
-uint64 retval
-"#,
-            "documentation" : {
-                "kind": "markdown",
-                "value": r#"
-
-Value returned by the function being traced
-
-(kretprobe, uretprobe, fexit)
-For kretprobe and uretprobe, its type is uint64, but for fexit it depends. You can look up the type using `bpftrace -lv`
-
-"#,
-            },
-        };
-        let _ = items.push(retval_item);
+        add_retval(node, text, &mut items);
+    }
+    if probes_compl.is_kfunc {
+        add_args(node, text, &mut items);
     }
 
-    // Special args. buildin
-    let completion_args = object! {
-        "label": "args",
-        "kind" : CompletionItemKind::Keyword,
-        "detail" : "args",
-        "documentation" : r#"
-This keyword represents the struct of all arguments of the traced function.
-You can print the entire structure via `print(args)` or access particular fields using the dot syntax, e.g., `$x = str(args.filename);`. "#,
-    };
-    let _ = items.push(completion_args);
     let is_incomplete = false; // Currently we provide complete list
     let data = object! {
         "result": {
@@ -977,6 +986,7 @@ pub fn find_kfunc_list_arguments(
 
     Some((module, resolved_func))
 }
+
 fn get_details_and_docs(probes_vec: &[String], fields: &str) -> Option<(String, String)> {
     let found = fields;
 
