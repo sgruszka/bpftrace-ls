@@ -75,8 +75,8 @@ fn btf_item_to_str(item: &ResolvedBtfItem, with_name: bool) -> String {
 }
 
 fn resolve_args_name_chain(
-    module: String,
-    resolved_func: ResolvedBtfItem,
+    module: &String,
+    resolved_func: &ResolvedBtfItem,
     this_argument: &str,
 ) -> Option<ResolvedVariable> {
     // log_dbg!(COMPL, "MODULE {}", module);
@@ -97,8 +97,8 @@ fn resolve_args_name_chain(
     let module_btf_map = MODULE_BTF_MAP.lock().unwrap();
 
     if let Some(resolved_var) = module_btf_map
-        .get(&module)
-        .and_then(|btf| btf_iterate_over_names_chain(btf, &resolved_func, this_argument))
+        .get(module)
+        .and_then(|btf| btf_iterate_over_names_chain(btf, resolved_func, this_argument))
     {
         return Some(resolved_var);
     }
@@ -298,7 +298,7 @@ fn encode_completion_for_args_or_retval(
     } else if let Some(next_items) = probes_compl
         .btf_probe_args
         .and_then(|(module, resolved_btf)| {
-            resolve_args_name_chain(module, resolved_btf, args_with_fields)
+            resolve_args_name_chain(&module, &resolved_btf, args_with_fields)
         })
         .and_then(|item| item.var_type)
     {
@@ -422,8 +422,6 @@ fn encode_completion_for_action(
 
     // TODO preload btf module
     let mut items = json::JsonValue::new_array();
-
-    let is_kfunc: bool = probes_compl.is_kfunc; // TODO change to has_args, for probes when args. are valid
 
     bpftrace_stdlib_functions(&mut items);
     add_action_block_keywords(&mut items);
@@ -987,16 +985,16 @@ pub fn find_kfunc_list_arguments(
     Some((module, resolved_func))
 }
 
-fn get_details_and_docs(probes_vec: &[String], fields: &str) -> Option<(String, String)> {
-    let found = fields;
+// For args and retval
+fn get_details_and_docs(
+    probes_compl: &ProbesCompletion,
+    keyword_with_fields: &str,
+) -> Option<(String, String)> {
+    let (module, resolved_func) = probes_compl.btf_probe_args.as_ref()?;
 
-    let (_is_kfunc, has_retval) = are_all_kfuncs(probes_vec);
-
-    let btf_probe_args = find_kfunc_list_arguments(probes_vec, has_retval);
-    let (module, resolved_func) = btf_probe_args?;
     let func_name = resolved_func.name.clone();
 
-    let resolved_variable = resolve_args_name_chain(module, resolved_func, found)?;
+    let resolved_variable = resolve_args_name_chain(module, resolved_func, keyword_with_fields)?;
 
     let mut details = String::new();
     let mut docs = String::new();
@@ -1004,11 +1002,10 @@ fn get_details_and_docs(probes_vec: &[String], fields: &str) -> Option<(String, 
     let hover_name = btf_item_to_str(&resolved_variable.var, true);
 
     let mut is_args = false;
-    if found == "args." {
+    if keyword_with_fields == "args." {
         details.push_str(&format!("Arguments of {}():\n", func_name));
-
         is_args = true;
-    } else if found == "retval" {
+    } else if keyword_with_fields == "retval" {
         details.push_str(&format!("Return value of {}():\n", func_name));
         docs.push_str(&format!("```c\n{};```\n", hover_name));
     } else {
@@ -1118,7 +1115,20 @@ pub fn encode_hover(content: json::JsonValue) -> json::JsonValue {
         let probes_vec = parser::find_probes_for_action(&node, text);
         log_dbg!(HOVER, "Found probes vec {:?}", probes_vec);
 
-        let Some((details, docs)) = get_details_and_docs(&probes_vec, &found) else {
+        let (is_kfunc, has_retval) = are_all_kfuncs(&probes_vec);
+
+        let btf_probe_args = find_kfunc_list_arguments(&probes_vec, has_retval);
+        if btf_probe_args.is_none() {
+            return empty_data;
+        }
+        let probes_compl = ProbesCompletion {
+            probes_vec,
+            btf_probe_args,
+            is_kfunc,
+            has_retval,
+        };
+
+        let Some((details, docs)) = get_details_and_docs(&probes_compl, &found) else {
             return empty_data;
         };
 
