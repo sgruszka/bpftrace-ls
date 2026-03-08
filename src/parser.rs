@@ -374,16 +374,12 @@ pub fn find_variables_for_action(
     results
 }
 
-pub fn find_source_file_macros_for_action(action: &Node, text: &str) -> Vec<String> {
-    assert_eq!(action.kind(), "action");
-
-    let mut macros = Vec::new();
-    let mut node = *action;
+fn node_to_source_file(n: Node) -> Option<Node> {
+    let mut node = n;
 
     let source_file = loop {
-        let Some(parent) = node.parent() else {
-            return macros;
-        };
+        let parent = node.parent()?;
+
         if parent.kind() == "source_file" {
             break parent;
         }
@@ -391,6 +387,17 @@ pub fn find_source_file_macros_for_action(action: &Node, text: &str) -> Vec<Stri
         node = parent;
     };
 
+    Some(source_file)
+}
+
+pub fn find_source_file_macros_for_action(action: &Node, text: &str) -> Vec<String> {
+    assert_eq!(action.kind(), "action");
+
+    let mut macros = Vec::new();
+
+    let Some(source_file) = node_to_source_file(*action) else {
+        return macros;
+    };
     assert_eq!(source_file.kind(), "source_file");
 
     let mut cursor = source_file.walk();
