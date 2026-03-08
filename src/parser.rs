@@ -285,6 +285,7 @@ fn add_source_file_map_variables_for_action(action: &Node, text: &str, results: 
 
     for map_node in nodes {
         assert_eq!(map_node.kind(), "map_variable");
+
         let Ok(map_str) = map_node.utf8_text(text.as_bytes()) else {
             return;
         };
@@ -662,6 +663,28 @@ kfunc:vmlinux:posix_timer_fn {
     }
 
     #[test]
+    fn test_query_for_map_variables() {
+        let text = r#"
+begin {
+  @a[1,1] = 1;
+  @a[2,1] = 2;
+  @b[0] = 3;
+  @c = 8;
+  @d[/* block comment
+        */@a[1,1], 8, 5] = 3;
+
+}
+    "#;
+        let tree = setup_syntax_tree(text);
+
+        let variables = find_all_map_variables(text, &tree.root_node());
+        assert_eq!(variables.len(), 5);
+        for v in variables {
+            assert_eq!(v.kind(), "map_variable");
+        }
+    }
+
+    #[test]
     fn test_find_one_variable_for_action() {
         let text = r#"
 begin {
@@ -758,25 +781,28 @@ begin {
     }
 
     #[test]
-    fn test_find_all_map_variables() {
+    fn test_find_map_variables_for_two_probes() {
         let text = r#"
-begin {
-  @a[1,1] = 1;
-  @a[2,1] = 2;
-  @b[0] = 3;
-  @c = 8;
-  @d[/* block comment
-        */@a[1,1], 8, 5] = 3;
+tracepoint:syscalls:sys_enter_wait4
+{
+  @out[tid] = args.ru;
+  @stamp[comm] = nsecs;
+} 
+tracepoint:syscalls:sys_exit_wait4
+{
 
-}
+} 
     "#;
         let tree = setup_syntax_tree(text);
 
-        let variables = find_all_map_variables(text, &tree.root_node());
-        assert_eq!(variables.len(), 5);
-        for v in variables {
-            assert_eq!(v.kind(), "map_variable");
-        }
+        let (loc, action) = find_syntax_location(text, &tree, 8, 0);
+        assert_eq!(loc, SyntaxLocation::Action);
+        assert_eq!(action.kind(), "action");
+
+        let variables = find_variables_for_action(&action, text, 8, 0);
+        assert_eq!(variables.len(), 2);
+        assert_eq!(variables[0], "@out[]");
+        assert_eq!(variables[1], "@stamp[]");
     }
 
     #[test]
