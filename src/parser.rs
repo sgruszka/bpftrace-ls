@@ -77,13 +77,19 @@ pub fn find_syntax_location<'t>(
     ]
     "#;
 
-    let query = Query::new(&tree_sitter_bpftrace::LANGUAGE.into(), query_str)
-        .expect("Error creating query"); // TODO
+    let mut ret = (SyntaxLocation::SourceFile, tree.root_node());
+
+    let query = match Query::new(&tree_sitter_bpftrace::LANGUAGE.into(), query_str) {
+        Ok(q) => q,
+        Err(e) => {
+            log_err!("Tree-sitter error: {}", e);
+            return ret;
+        }
+    };
 
     let mut query_cursor = QueryCursor::new();
     let mut matches = query_cursor.matches(&query, tree.root_node(), text.as_bytes());
 
-    let mut ret = (SyntaxLocation::SourceFile, tree.root_node());
     let mut current_node: Option<Node> = None;
 
     'matches_loop: while let Some(m) = matches.next() {
@@ -132,8 +138,13 @@ pub fn find_error_location<'t>(
     ]
     "#;
 
-    let query = Query::new(&tree_sitter_bpftrace::LANGUAGE.into(), query_str)
-        .expect("Error creating query"); // TODO
+    let query = match Query::new(&tree_sitter_bpftrace::LANGUAGE.into(), query_str) {
+        Ok(q) => q,
+        Err(e) => {
+            log_err!("Tree-sitter error: {}", e);
+            return None;
+        }
+    };
 
     let mut query_cursor = QueryCursor::new();
     let mut matches = query_cursor.matches(&query, *root_node, text.as_bytes());
@@ -163,8 +174,13 @@ pub fn find_errors<'t>(text: &str, root_node: &Node<'t>) -> Vec<Node<'t>> {
     ]
     "#;
 
-    let query = Query::new(&tree_sitter_bpftrace::LANGUAGE.into(), query_str)
-        .expect("Error creating query"); // TODO
+    let query = match Query::new(&tree_sitter_bpftrace::LANGUAGE.into(), query_str) {
+        Ok(q) => q,
+        Err(e) => {
+            log_err!("Tree-sitter error: {}", e);
+            return Vec::new();
+        }
+    };
 
     let mut query_cursor = QueryCursor::new();
     let mut matches = query_cursor.matches(&query, *root_node, text.as_bytes());
@@ -229,8 +245,10 @@ fn probes_list_to_vec(probes_list: &Node, text: &str) -> Vec<String> {
 pub fn find_probes_for_action(action: &Node, text: &str) -> Vec<String> {
     assert_eq!(action.kind(), "action");
 
-    // TODO remove unwrap and add checks in case of broken tree
-    let action_block = action.parent().unwrap();
+    let Some(action_block) = action.parent() else {
+        return Vec::new();
+    };
+    // TODO: handle broken tree - remove assertions
     assert_eq!(action_block.kind(), "action_block");
 
     let probes_list = action_block.child(0).unwrap();
