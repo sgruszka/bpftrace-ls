@@ -276,14 +276,15 @@ fn add_scratch_variables_for_node(
     }
 }
 
-fn add_map_variables_for_node(node: &Node, text: &str, results: &mut Vec<String>, child_nr: usize) {
-    if let Some(map_node) = node.child(child_nr).and_then(|node| {
-        if node.kind() == "map_variable" {
-            Some(node)
-        } else {
-            None
-        }
-    }) {
+fn add_source_file_map_variables_for_action(action: &Node, text: &str, results: &mut Vec<String>) {
+    let Some(source_file) = node_to_source_file(*action) else {
+        return;
+    };
+
+    let nodes = find_all_map_variables(text, &source_file);
+
+    for map_node in nodes {
+        assert_eq!(map_node.kind(), "map_variable");
         let Ok(map_str) = map_node.utf8_text(text.as_bytes()) else {
             return;
         };
@@ -355,7 +356,6 @@ fn add_variables_for_block(
         };
 
         add_scratch_variables_for_node(&node, text, results, child_idx);
-        add_map_variables_for_node(&node, text, results, child_idx);
     }
 }
 
@@ -370,6 +370,7 @@ pub fn find_variables_for_action(
     let mut results = Vec::new();
 
     add_variables_for_block(action, text, line_nr, char_nr, &mut results);
+    add_source_file_map_variables_for_action(action, text, &mut results);
 
     results
 }
