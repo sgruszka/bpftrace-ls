@@ -1,7 +1,7 @@
 use tree_sitter::{Node, Point, Query, QueryCursor, StreamingIterator, Tree};
 
-use crate::log_dbg;
 use crate::log_mod::{self, PARSE};
+use crate::{log_dbg, log_err};
 
 // Syntax tree nodes we are interested in in context of completion
 #[derive(Debug, PartialEq)]
@@ -165,6 +165,35 @@ pub fn find_errors<'t>(text: &str, root_node: &Node<'t>) -> Vec<Node<'t>> {
 
     let query = Query::new(&tree_sitter_bpftrace::LANGUAGE.into(), query_str)
         .expect("Error creating query"); // TODO
+
+    let mut query_cursor = QueryCursor::new();
+    let mut matches = query_cursor.matches(&query, *root_node, text.as_bytes());
+
+    let mut results: Vec<Node> = vec![];
+
+    while let Some(m) = matches.next() {
+        for cap in m.captures {
+            let node = cap.node;
+            results.push(node);
+        }
+    }
+
+    results
+}
+
+pub fn find_all_map_variables<'t>(text: &str, root_node: &Node<'t>) -> Vec<Node<'t>> {
+    let query_str = r#"
+        (assignment_statement
+          left: (map_variable) @map.lhs)
+    "#;
+
+    let query = match Query::new(&tree_sitter_bpftrace::LANGUAGE.into(), query_str) {
+        Ok(q) => q,
+        Err(e) => {
+            log_err!("Tree-sitter error: {}", e);
+            return Vec::new();
+        }
+    };
 
     let mut query_cursor = QueryCursor::new();
     let mut matches = query_cursor.matches(&query, *root_node, text.as_bytes());
@@ -700,6 +729,28 @@ begin {
         assert_eq!(variables[1], "@b[]");
         assert_eq!(variables[2], "@c");
         assert_eq!(variables[3], "@d[,,]");
+    }
+
+    #[test]
+    fn test_find_all_map_variables() {
+        let text = r#"
+begin {
+  @a[1,1] = 1;
+  @a[2,1] = 2;
+  @b[0] = 3;
+  @c = 8;
+  @d[/* block comment
+        */@a[1,1], 8, 5] = 3;
+
+}
+    "#;
+        let tree = setup_syntax_tree(text);
+
+        let variables = find_all_map_variables(text, &tree.root_node());
+        assert_eq!(variables.len(), 5);
+        for v in variables {
+            assert_eq!(v.kind(), "map_variable");
+        }
     }
 
     #[test]
