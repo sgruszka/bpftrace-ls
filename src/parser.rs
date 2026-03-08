@@ -682,19 +682,24 @@ begin {
   @a[1,1] = 1;
   @a[2,1] = 2;
   @b[0] = 3;
+  @c = 8;
+  @d[/* block comment
+        */@a[1,1], 8, 5] = 3;
 
 }
     "#;
         let tree = setup_syntax_tree(text);
 
-        let (loc, action) = find_syntax_location(text, &tree, 4, 0);
+        let (loc, action) = find_syntax_location(text, &tree, 8, 0);
         assert_eq!(loc, SyntaxLocation::Action);
         assert_eq!(action.kind(), "action");
 
-        let variables = find_variables_for_action(&action, text, 5, 0);
-        assert_eq!(variables.len(), 2);
+        let variables = find_variables_for_action(&action, text, 8, 0);
+        assert_eq!(variables.len(), 4);
         assert_eq!(variables[0], "@a[,]");
         assert_eq!(variables[1], "@b[]");
+        assert_eq!(variables[2], "@c");
+        assert_eq!(variables[3], "@d[,,]");
     }
 
     #[test]
