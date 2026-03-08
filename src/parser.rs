@@ -665,6 +665,28 @@ begin {
     }
 
     #[test]
+    fn test_find_map_variables_simple() {
+        let text = r#"
+begin {
+  @a[1,1] = 1;
+  @a[2,1] = 2;
+  @b[0] = 3;
+
+}
+    "#;
+        let tree = setup_syntax_tree(text);
+
+        let (loc, action) = find_syntax_location(text, &tree, 4, 0);
+        assert_eq!(loc, SyntaxLocation::Action);
+        assert_eq!(action.kind(), "action");
+
+        let variables = find_variables_for_action(&action, text, 5, 0);
+        assert_eq!(variables.len(), 2);
+        assert_eq!(variables[0], "@a[,]");
+        assert_eq!(variables[1], "@b[]");
+    }
+
+    #[test]
     fn test_find_file_macros() {
         let text = r#"
 macro add_one(x) {
