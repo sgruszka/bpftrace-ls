@@ -230,24 +230,35 @@ fn add_scratch_variables_for_node(
 }
 
 fn add_map_variables_for_node(node: &Node, text: &str, results: &mut Vec<String>, child_nr: usize) {
-    if let Some(var) = node.child(child_nr).and_then(|var| {
-        if var.kind() == "map_variable" {
-            Some(var)
+    if let Some(map_node) = node.child(child_nr).and_then(|node| {
+        if node.kind() == "map_variable" {
+            Some(node)
         } else {
             None
         }
     }) {
-        let Ok(map_with_indexes) = var.utf8_text(text.as_bytes()) else {
+        let Ok(map_str) = map_node.utf8_text(text.as_bytes()) else {
             return;
         };
 
-        let mut map_var = map_with_indexes.to_owned();
+        let comma_count: usize = if let Some(indexes_list) = map_node.child(0) {
+            let mut index_count: usize = 0;
 
-        // TODO: this will not work for nested map i.e. @a[@b[1,2], 3] - to fix use nodes positions
-        // Remove indexes
-        if let Some((before, rest)) = map_with_indexes.split_once('[') {
-            if let Some((inside, after)) = rest.split_once(']') {
-                let comma_count = inside.matches(',').count();
+            let mut cursor = indexes_list.walk();
+            for idx_node in indexes_list.named_children(&mut cursor) {
+                if idx_node.is_extra() {
+                    continue;
+                }
+                index_count += 1;
+            }
+            index_count.saturating_sub(1)
+        } else {
+            0
+        };
+
+        let mut map_var = map_str.to_owned();
+        if let Some((before, rest)) = map_str.split_once('[') {
+            if let Some((_inside, after)) = rest.rsplit_once(']') {
                 let replacement = ",".repeat(comma_count);
                 map_var = format!("{}[{}]{}", before, replacement, after);
             }
