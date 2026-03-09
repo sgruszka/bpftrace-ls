@@ -394,10 +394,22 @@ fn add_retval(probes_compl: &ProbesCompletion, items: &mut json::JsonValue) {
     let _ = items.push(retval_item);
 }
 
-fn add_args(probes_compl: &ProbesCompletion, items: &mut json::JsonValue) {
-    let Some((details, docs)) = get_details_and_docs(probes_compl, "args.", false) else {
-        return;
-    };
+fn add_args(probes_compl: &ProbesCompletion, is_kfunc: bool, items: &mut json::JsonValue) {
+    let mut details = "args".to_owned();
+    let mut docs = r#"
+This keyword represents the struct of all arguments of the traced function.
+You can print the entire structure via `print(args)` or access particular
+fields using the dot syntax, e.g., `$x = str(args.filename);`. "#
+        .to_owned();
+
+    // TODO add only for probes where 'args' it is valid
+    // TODO get details and doc for other probes i.e. tracepoint
+    if is_kfunc {
+        if let Some((btf_details, btf_docs)) = get_details_and_docs(probes_compl, "args.", false) {
+            details = btf_details;
+            docs = btf_docs
+        };
+    }
 
     let completion_args = object! {
         "label": "args",
@@ -416,9 +428,8 @@ fn add_args_and_retval_keywords(probes_compl: &ProbesCompletion, items: &mut jso
     if probes_compl.has_retval {
         add_retval(probes_compl, items);
     }
-    if probes_compl.is_kfunc {
-        add_args(probes_compl, items);
-    }
+
+    add_args(probes_compl, probes_compl.is_kfunc, items);
 }
 
 fn encode_completion_for_action(
